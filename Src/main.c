@@ -25,7 +25,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <AS7343.h>
-#include <I2C.h>
+#include <I2C1.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/

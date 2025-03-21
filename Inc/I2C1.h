@@ -1,5 +1,5 @@
 /*
- * I2C.h
+ * I2C1.h
  *
  *  Created on: Feb 6, 2025
  *      Author: moreypiatos
@@ -7,11 +7,8 @@
 
 #include <stdint.h>
 
-#define write 0
-#define read  1
-
-#ifndef I2C_H_
-#define I2C_H_
+#ifndef I2C1_H_
+#define I2C1_H_
 
 /**
  * @brief Initializes I2C Peripheral
@@ -59,4 +56,4 @@ uint8_t I2C_read(uint8_t slave_addr, uint8_t reg_addr);
 uint16_t I2C_read_2b(uint8_t slave_addr, uint8_t reg_upper_addr, uint8_t reg_lower_addr);
 
 
-#endif /* I2C_H_ */
+#endif /* I2C1_H_ */

@@ -21,7 +21,7 @@
 #include <stm32f4xx.h>
 #include <stm32f411xe.h>
 #include <AS7343.h>
-#include <I2C.h>
+#include <I2C1.h>
 
 /**
  * @brief List of channels in the vis-nir range
@@ -138,11 +138,40 @@ void AS7343_auto_smux(auto_smux_mode auto_smux_mode) {
 	}
 }
 
+void AS7343_set_ASTEP(uint16_t astep) {
+	if (astep == 0) {
+		if (AS7343_read(AS7343_ATIME) == 0) { // do not allow ATIME = ASTEP = 0 as per datasheet
+			AS7343_conf(AS7343_ASTEP_L, 0x01);
+			AS7343_conf(AS7343_ASTEP_H, 0x00);
+		}
+	} else {
+		AS7343_conf(AS7343_ASTEP_L, (uint8_t) astep);
+		AS7343_conf(AS7343_ASTEP_L, (uint8_t) astep >> 8);
+	}
+}
+
+
+void AS7343_set_ATIME(uint8_t atime) {
+	if (atime == 0) {
+		if (AS7343_read_2b(AS7343_ASTEP_L) == 0) {
+			AS7343_conf(AS7343_ATIME, 0x01); // do not allow ATIME = ASTEP = 0 as per datasheet
+		}
+	} else {
+		AS7343_conf(AS7343_ATIME, atime);
+	}
+}
+
 
 int AS7343_done() {
 	int reg_val = (int) AS7343_read(AS7343_STATUS2);
-	int return_val = reg_val & 0b01000000;
-	return (return_val >> 6);
+	int return_val = reg_val & 0b00001000;
+	return (return_val >> 3);
+}
+
+int AS7343_DSat() {
+	int reg_val = (int) AS7343_read(AS7343_STATUS2);
+	int return_val = reg_val & 0b00010000;
+	return (return_val >> 4);
 }
 
 void AS7343_get_spectrum(uint16_t channel_readings[12]) {
@@ -316,4 +345,15 @@ uint8_t AS7343_read(uint8_t reg_addr) {
 
 	return ret_val;
 
+}
+
+uint16_t AS7343_read_2b(uint8_t reg_addr_lower_byte) {
+	uint16_t return_val = 0x0000;
+	uint8_t reg_read_val = 0x00;
+	reg_read_val = AS7343_read(reg_addr_lower_byte);
+	return_val |= (reg_read_val << 0);
+	reg_read_val = AS7343_read(reg_addr_lower_byte + 0x01);
+	return_val |= (reg_read_val << 8);
+
+	return return_val;
 }

@@ -1,31 +1,24 @@
 /*
- * I2C.c
+ * I2C1.c
  *
  *  Created on: Feb 6, 2025
  *      Author: moreypiatos
+ *
+ * Uses STM32F411 I2C1 peripheral
+ *
+ * PIN LAYOUT
+ *    PB8  : SDA
+ *    PB9  : SCL
  */
 
+#include <I2C1.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stm32f4xx.h>
 #include <stm32f411xe.h>
-#include <I2C.h>
 
 
 void Init_I2C() {
-
-	/* SOME NOTES
-	 *  - I2C automatically configures as Master Mode when sending START signal (through CR1 register)
-	 *  - 7-bit addressing mode
-	 *  - I2C->CR1[12] = STOP
-	 *  - I2C->CR1[13] = START
-	 *  - I2C->TXDR = byte to be transmitted
-	 *  - I2C->RXDR = byte received
-	 * SEQUENCE FOR MASTER MODE:
-	 *  - program peripheral input clock (CR2)
-	 *  - configure SCL (TIMINGR)
-	 * */
-
 	// 1. enable I2C clock
 	RCC->APB1ENR |= (1<<21);  // enable I2C CLOCK
 

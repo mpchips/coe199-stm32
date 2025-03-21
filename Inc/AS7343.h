@@ -28,7 +28,6 @@
   0x80 ///< Main enable register. Controls SMUX, Flicker Detection, Spectral
        ///< Measurements and Power
 #define AS7343_ATIME 0x81       ///< Sets ADC integration step count
-#define AS7343_WTIME 0x83       ///< AS7343_WTIME (unused)
 #define AS7343_SP_LOW_TH_L 0x84 ///< Spectral measurement Low Threshold low byte
 #define AS7343_SP_LOW_TH_H                                                     \
   0x85 ///< Spectral measurement Low Threshold high byte
@@ -144,6 +143,7 @@ typedef enum {
   AS7343_GAIN_1024X,
   AS7343_GAIN_2048X,
 } AS7343_gain_t;
+
 
 /**
  * @brief Available SMUX configuration commands
@@ -276,15 +276,32 @@ void AS7343_conf(uint8_t reg_addr, uint8_t data);
 void AS7343_auto_smux(auto_smux_mode auto_smux_mode);
 
 /**
- * @brief Sets integration time.
+ * @brief Sets the integration time per step in increments
+ * 		  of 2.78 μs. The default value is 999.
  * */
-void AS7343_tint();
+void AS7343_set_ASTEP(uint16_t astep);
+
+/**
+ * @brief Sets the number of integration steps from
+ * 		  1 to 255.
+ * */
+void AS7343_set_ATIME(uint8_t atime);
 
 /**
  * @brief Checks whether current set of measured values
  * 	      have completed ADC and are ready to be read.
  * */
 int AS7343_done();
+
+/**
+ * @brief Checks checks for analog saturation.
+ * */
+int AS7343_ASat();
+
+/**
+ * @brief Checks checks for digital saturation.
+ * */
+int AS7343_DSat();
 
 void AS7343_get_spectrum();
 
@@ -302,6 +319,6 @@ uint16_t AS7343_read_channel(AS7343_color_channel_t channel);
 
 uint8_t AS7343_read(uint8_t reg_addr);
 
-
+uint16_t AS7343_read_2b(uint8_t reg_addr_lower_byte);
 
 #endif /* AS7343_H_ */
