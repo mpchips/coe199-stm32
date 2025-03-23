@@ -252,7 +252,6 @@ typedef enum {
 void Init_AS7343();
 
 void Init_AS7343_GPIO();
-void Init_AS7343_I2C();
 
 /**
  * @brief Simultaneously powers on AS7343 and
@@ -271,7 +270,6 @@ void AS7343_disable();
  * */
 void AS7343_reset();
 
-void AS7343_conf(uint8_t reg_addr, uint8_t data);
 
 void AS7343_auto_smux(auto_smux_mode auto_smux_mode);
 
@@ -286,6 +284,11 @@ void AS7343_set_ASTEP(uint16_t astep);
  * 		  1 to 255.
  * */
 void AS7343_set_ATIME(uint8_t atime);
+
+/**
+ * @brief Sets the ADC gain.
+ * */
+void AS7343_set_AGAIN(AS7343_gain_t gain);
 
 /**
  * @brief Checks whether current set of measured values
@@ -303,6 +306,13 @@ int AS7343_ASat();
  * */
 int AS7343_DSat();
 
+/**
+ * @brief Finds the best parameter configuration to take
+ * 		  measurements with. Returns a set of measurements
+ * 		  using the best parameters found.
+ * */
+void AS7343_get_spectrum_optimized(uint16_t channel_readings[12], int max_loops);
+
 void AS7343_get_spectrum();
 
 /**
@@ -317,8 +327,22 @@ void AS7343_read_spectrum(uint16_t channel_readings[12]);
 
 uint16_t AS7343_read_channel(AS7343_color_channel_t channel);
 
+uint16_t AS7343_get_ASTEP();
+
+uint8_t AS7343_get_ATIME();
+
+AS7343_gain_t AS7343_get_AGAIN();
+
+void AS7343_write(uint8_t reg_addr, uint8_t data);
+
 uint8_t AS7343_read(uint8_t reg_addr);
 
 uint16_t AS7343_read_2b(uint8_t reg_addr_lower_byte);
+
+uint16_t maxValue(uint16_t array[], size_t size);
+
+int u16_f_mulOvf(uint16_t a, float b);
+
+int u8_f_mulOvf(uint8_t a, float b);
 
 #endif /* AS7343_H_ */

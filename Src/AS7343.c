@@ -27,18 +27,18 @@
  * @brief List of channels in the vis-nir range
  */
 AS7343_color_channel_t vis_nir_channels[12] = {
-  AS7343_CHANNEL_F1,
-  AS7343_CHANNEL_F2,
-  AS7343_CHANNEL_FZ,
-  AS7343_CHANNEL_F3,
-  AS7343_CHANNEL_F4,
-  AS7343_CHANNEL_F5,
-  AS7343_CHANNEL_FY,
-  AS7343_CHANNEL_FXL,
-  AS7343_CHANNEL_F6,
-  AS7343_CHANNEL_F7,
-  AS7343_CHANNEL_F8,
-  AS7343_CHANNEL_NIR,
+	AS7343_CHANNEL_F1,
+	AS7343_CHANNEL_F2,
+	AS7343_CHANNEL_FZ,
+	AS7343_CHANNEL_F3,
+	AS7343_CHANNEL_F4,
+	AS7343_CHANNEL_F5,
+	AS7343_CHANNEL_FY,
+	AS7343_CHANNEL_FXL,
+	AS7343_CHANNEL_F6,
+	AS7343_CHANNEL_F7,
+	AS7343_CHANNEL_F8,
+	AS7343_CHANNEL_NIR,
 };
 
 /**
@@ -46,18 +46,34 @@ AS7343_color_channel_t vis_nir_channels[12] = {
  * 	      in the vis-nir range.
  */
 uint16_t vis_nir_bands[12] = {
-  405,
-  425,
-  450,
-  475,
-  515,
-  550,
-  555,
-  600,
-  640,
-  690,
-  745,
-  855
+	405,
+	425,
+	450,
+	475,
+	515,
+	550,
+	555,
+	600,
+	640,
+	690,
+	745,
+	855,
+};
+
+AS7343_gain_t AGAIN_lookup[13] = {
+	AS7343_GAIN_0_5X,
+	AS7343_GAIN_1X,
+	AS7343_GAIN_2X,
+	AS7343_GAIN_4X,
+	AS7343_GAIN_8X,
+	AS7343_GAIN_16X,
+	AS7343_GAIN_32X,
+	AS7343_GAIN_64X,
+	AS7343_GAIN_128X,
+	AS7343_GAIN_256X,
+	AS7343_GAIN_512X,
+	AS7343_GAIN_1024X,
+	AS7343_GAIN_2048X,
 };
 
 
@@ -103,18 +119,361 @@ void Init_AS7343_GPIO() {
 }
 
 void AS7343_enable() {
-	AS7343_conf(0b10000000, 0x03);
+	AS7343_write(0b10000000, 0x03);
 }
 
 void AS7343_disable() {
-	AS7343_conf(AS7343_ENABLE, 0x00);
+	AS7343_write(AS7343_ENABLE, 0x00);
 }
 
 void AS7343_reset() {
-	AS7343_conf(AS7343_CONTROL, 1 << 3);
+	AS7343_write(AS7343_CONTROL, 1 << 3);
 }
 
-void AS7343_conf(uint8_t reg_addr, uint8_t data) {
+void AS7343_auto_smux(auto_smux_mode auto_smux_mode) {
+	switch (auto_smux_mode) {
+		case mode0_6ch:
+			AS7343_write(AS7343_CFG20, (0b00 << 5));
+		case mode1_12ch:
+			AS7343_write(AS7343_CFG20, (0b10 << 5));
+		case mode2_18ch:
+			AS7343_write(AS7343_CFG20, (0b11 << 5));
+	}
+}
+
+void AS7343_set_ASTEP(uint16_t astep) {
+	if (astep == 0) {
+		if (AS7343_read(AS7343_ATIME) == 0) { // do not allow ATIME = ASTEP = 0 as per datasheet
+			AS7343_write(AS7343_ASTEP_L, 0x01);
+			AS7343_write(AS7343_ASTEP_H, 0x00);
+		}
+	} else {
+		AS7343_write(AS7343_ASTEP_L, (uint8_t) astep);
+		AS7343_write(AS7343_ASTEP_L, (uint8_t) astep >> 8);
+	}
+}
+
+
+void AS7343_set_ATIME(uint8_t atime) {
+	if (atime == 0) {
+		if (AS7343_read_2b(AS7343_ASTEP_L) == 0) {
+			AS7343_write(AS7343_ATIME, 0x01); // do not allow ATIME = ASTEP = 0 as per datasheet
+		}
+	} else {
+		AS7343_write(AS7343_ATIME, atime);
+	}
+}
+
+
+int AS7343_done() {
+	int reg_val = (int) AS7343_read(AS7343_STATUS2);
+	int ret_val = reg_val & 0b00001000;
+	return (ret_val >> 3);
+}
+
+int AS7343_DSat() {
+	int reg_val = (int) AS7343_read(AS7343_STATUS2);
+	int ret_val = reg_val & 0b00010000;
+	return (ret_val >> 4);
+}
+
+int AS7343_ASat() {
+	int reg_val = (int) AS7343_read(AS7343_STATUS2);
+	int ret_val = reg_val & 0b00001000;
+	return (ret_val >> 3);
+}
+
+void AS7343_get_spectrum_optimized(uint16_t channel_readings[12], int max_loops) {
+	// for tracking variables
+	uint8_t  	  curr_ATIME = AS7343_get_ATIME();
+	uint16_t 	  curr_ASTEP = AS7343_get_ASTEP();
+	AS7343_gain_t curr_AGAIN = AS7343_get_AGAIN();
+
+	float factor; // = ADC_MAX/OUT_MAX, measure of how far output is from max possible
+
+	AS7343_get_spectrum(channel_readings);
+	uint16_t OUT_MAX = maxValue(channel_readings, sizeof(channel_readings)/2);
+
+	int isDigSat = AS7343_DSat(); // digital saturation
+	int isAnaSat = AS7343_ASat(); // analog saturation
+
+	// flags indicating if parameter can be/was adjusted accordingly
+	int okATIME = 1;
+	int okASTEP = 1;
+	int okAGAIN = 1;
+
+	int loop = 0;
+
+	while (loop < max_loops) {
+		++loop;
+
+		if (!isDigSat && !isAnaSat) { // if no saturation occurs
+			if (OUT_MAX > 50000) { break; } // if output is sufficiently large, we are done
+			if (loop >= max_loops) { break; } // if already at limit, do not further adjust values
+											  // and risk saturating final output. stick to latest
+											  // non-saturated measurements.
+
+			// ELSE, DO RE-CONFIGURATION --------------------------------------------------------//
+			factor = 0xFFFF/OUT_MAX;
+
+			// increase all parameters
+			// try to adjust ASTEP first
+			if (curr_ASTEP == 0xFFFE) { okASTEP = 0; } // if already max, adjust ATIME instead
+			else if (u16_f_mulOvf(curr_ASTEP + 1, factor)) { // check first if will overflow
+				curr_ASTEP = 0xFFFE;					 	 // if yes, set to max
+				AS7343_set_ASTEP(curr_ASTEP);
+				okASTEP = 1;
+			} else {
+				curr_ASTEP = (curr_ASTEP + 1)*factor - 1;
+				AS7343_set_ASTEP(curr_ASTEP);
+				okASTEP = 1;
+			}
+
+			// try to adjust ATIME
+			if (!okASTEP) { // ONLY if ASTEP couldn't be adjusted
+				if (curr_ATIME == 0xFF) { okATIME = 0; } // if also already max, adjust AGAIN instead
+				else if (u8_f_mulOvf(curr_ATIME + 1, factor)) { // check if will overflow
+					curr_ATIME = 0xFF;						 // if yes, set to max
+					AS7343_set_ATIME(curr_ATIME);
+					okATIME = 1;
+				} else {
+					curr_ATIME = (curr_ATIME + 1)*factor - 1;
+					AS7343_set_ATIME(curr_ATIME);
+					okATIME = 1;
+				}
+			}
+
+			// try to adjust AGAIN
+			if (!okATIME) { // ONLY if ATIME couldn't be adjusted
+				if (curr_AGAIN == 12) { okAGAIN = 0; } // if also already max, update flag
+				else {
+					curr_AGAIN += 1;
+					AS7343_set_AGAIN(curr_AGAIN);
+					okAGAIN = 1;
+				}
+			}
+
+			if (!okASTEP && !okATIME && !okAGAIN) { break; } // if nothing can be adjusted, tama na
+
+
+		} else {
+			// check for both digital and analog saturation
+			if (isDigSat) { // if digital saturated
+				if (curr_AGAIN == 0) { okAGAIN = 0; } // if already min (unlikely), adjust T_int (ASTEP or ATIME)
+				else {
+					curr_AGAIN += 1;
+					AS7343_set_AGAIN(curr_AGAIN);
+					okAGAIN = 1;
+				}
+			}
+
+			if (isAnaSat || !okAGAIN) { // if analog saturated, or AGAIN could not be adjusted
+				// try to adjust ASTEP first
+				if (curr_ASTEP == 0) { okASTEP = 0; } // if already min, adjust ATIME instead
+				else {
+					curr_ASTEP /= 2;
+					AS7343_set_ASTEP(curr_ASTEP);
+					okASTEP = 1;
+				}
+
+				// try to adjust ATIME
+				if (!okASTEP) { // ONLY if ASTEP couldn't be adjusted
+					if (curr_ATIME == 0) { okATIME = 0; } // if already min, update flag
+					else {
+						curr_ATIME /= 2;
+						AS7343_set_ASTEP(curr_ATIME);
+						okATIME = 1;
+					}
+				}
+
+				// scenarios in which kailangan na natin 'to itigil
+				if (!isDigSat && !okASTEP && !okATIME) {break;} // only analog saturation, but ATIME & ASTEP could not be adjusted
+				if (!okAGAIN && !okASTEP && !okATIME) {break;} // both saturation, none can be adjusted
+			}
+		}
+
+		// take new measurement; update vals and flags
+		AS7343_get_spectrum(channel_readings);
+		OUT_MAX = maxValue(channel_readings, sizeof(channel_readings)/2);
+
+		isDigSat = AS7343_DSat(); // digital saturation
+		isAnaSat = AS7343_ASat(); // analog saturation
+
+	} // end of while{}
+
+} // AS7343_get_spectrum_optimized()
+
+void AS7343_get_spectrum(uint16_t channel_readings[12]) {
+	AS7343_auto_smux(mode2_18ch);
+
+	AS7343_enable();
+
+	while (!AS7343_done()); // wait for measurement to finish
+
+	AS7343_read_spectrum(channel_readings);
+
+	AS7343_disable();
+} // AS7343_get_spectrum()
+
+
+void AS7343_read_spectrum(uint16_t channel_readings[12]) {
+	int i;
+	for (i = 0; i < 12; i++) {
+		channel_readings[i] = AS7343_read_channel(vis_nir_channels[i]);
+	}
+}
+
+uint16_t AS7343_read_channel(AS7343_color_channel_t channel) {
+	uint16_t ret_val = 0x0000;
+	uint8_t reg_read_val = 0x00;
+
+	// channels are arranged in spectral order, not accdg to data register order
+	switch (channel)
+	{
+		case AS7343_CHANNEL_F1:
+			reg_read_val = AS7343_read(AS7343_CH12_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH12_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_F2:
+			reg_read_val = AS7343_read(AS7343_CH6_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH6_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_FZ:
+			reg_read_val = AS7343_read(AS7343_CH0_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH0_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_F3:
+			reg_read_val = AS7343_read(AS7343_CH7_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH7_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_F4:
+			reg_read_val = AS7343_read(AS7343_CH8_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH8_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_F5:
+			reg_read_val = AS7343_read(AS7343_CH13_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH13_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_FY:
+			reg_read_val = AS7343_read(AS7343_CH1_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH1_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_FXL:
+			reg_read_val = AS7343_read(AS7343_CH2_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH2_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_F6:
+			reg_read_val = AS7343_read(AS7343_CH9_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH9_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_F7:
+			reg_read_val = AS7343_read(AS7343_CH14_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH14_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_F8:
+			reg_read_val = AS7343_read(AS7343_CH15_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH15_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_NIR:
+			reg_read_val = AS7343_read(AS7343_CH3_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH3_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		// OTHER CHANNELS --------
+		case AS7343_CHANNEL_CLR_0:
+			reg_read_val = AS7343_read(AS7343_CH16_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH16_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_CLR_1:
+			reg_read_val = AS7343_read(AS7343_CH10_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH10_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_CLR_2:
+			reg_read_val = AS7343_read(AS7343_CH4_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH4_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_FD_0:
+			reg_read_val = AS7343_read(AS7343_CH17_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH17_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_FD_1:
+			reg_read_val = AS7343_read(AS7343_CH11_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH11_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+
+		case AS7343_CHANNEL_FD_2:
+			reg_read_val = AS7343_read(AS7343_CH5_DATA_L);
+			ret_val |= (reg_read_val << 0);
+			reg_read_val = AS7343_read(AS7343_CH5_DATA_H);
+			ret_val |= (reg_read_val << 8);
+			break;
+	}
+
+	return ret_val;
+}
+
+uint16_t AS7343_get_ASTEP() {
+	return AS7343_read_2b(AS7343_ASTEP_L);
+}
+
+uint8_t AS7343_get_ATIME() {
+	return AS7343_read(AS7343_ATIME);
+}
+
+AS7343_gain_t AS7343_get_AGAIN() {
+	return (AS7343_read(AS7343_CFG1) & 0x0F); // mask reserved bits
+}
+
+void AS7343_write(uint8_t reg_addr, uint8_t data) {
 	I2C_start();
 
 	I2C_transmit_addr(AS7343_CHIP_ADDR_WRITE); // chip-addresswrite
@@ -127,209 +486,15 @@ void AS7343_conf(uint8_t reg_addr, uint8_t data) {
 	I2C_stop();
 }
 
-void AS7343_auto_smux(auto_smux_mode auto_smux_mode) {
-	switch (auto_smux_mode) {
-		case mode0_6ch:
-			AS7343_conf(AS7343_CFG20, (0b00 << 5));
-		case mode1_12ch:
-			AS7343_conf(AS7343_CFG20, (0b10 << 5));
-		case mode2_18ch:
-			AS7343_conf(AS7343_CFG20, (0b11 << 5));
-	}
-}
-
-void AS7343_set_ASTEP(uint16_t astep) {
-	if (astep == 0) {
-		if (AS7343_read(AS7343_ATIME) == 0) { // do not allow ATIME = ASTEP = 0 as per datasheet
-			AS7343_conf(AS7343_ASTEP_L, 0x01);
-			AS7343_conf(AS7343_ASTEP_H, 0x00);
-		}
-	} else {
-		AS7343_conf(AS7343_ASTEP_L, (uint8_t) astep);
-		AS7343_conf(AS7343_ASTEP_L, (uint8_t) astep >> 8);
-	}
-}
-
-
-void AS7343_set_ATIME(uint8_t atime) {
-	if (atime == 0) {
-		if (AS7343_read_2b(AS7343_ASTEP_L) == 0) {
-			AS7343_conf(AS7343_ATIME, 0x01); // do not allow ATIME = ASTEP = 0 as per datasheet
-		}
-	} else {
-		AS7343_conf(AS7343_ATIME, atime);
-	}
-}
-
-
-int AS7343_done() {
-	int reg_val = (int) AS7343_read(AS7343_STATUS2);
-	int return_val = reg_val & 0b00001000;
-	return (return_val >> 3);
-}
-
-int AS7343_DSat() {
-	int reg_val = (int) AS7343_read(AS7343_STATUS2);
-	int return_val = reg_val & 0b00010000;
-	return (return_val >> 4);
-}
-
-void AS7343_get_spectrum(uint16_t channel_readings[12]) {
-	AS7343_auto_smux(mode2_18ch);
-
-	AS7343_enable();
-
-	while (!AS7343_done()); // wait for measurement to finish
-
-	AS7343_read_spectrum(channel_readings);
-
-	AS7343_disable();
-}
-
-
-void AS7343_read_spectrum(uint16_t channel_readings[12]) {
-	int i;
-	for (i = 0; i < 12; i++) {
-		channel_readings[i] = AS7343_read_channel(vis_nir_channels[i]);
-	}
-}
-
-uint16_t AS7343_read_channel(AS7343_color_channel_t channel) {
-	uint16_t return_val = 0x0000;
+uint16_t AS7343_read_2b(uint8_t reg_addr_lower_byte) {
+	uint16_t ret_val = 0x0000;
 	uint8_t reg_read_val = 0x00;
+	reg_read_val = AS7343_read(reg_addr_lower_byte);
+	ret_val |= (reg_read_val << 0);
+	reg_read_val = AS7343_read(reg_addr_lower_byte + 0x01);
+	ret_val |= (reg_read_val << 8);
 
-	// channels are arranged in spectral order, not accdg to data register order
-	switch (channel)
-	{
-		case AS7343_CHANNEL_F1:
-			reg_read_val = AS7343_read(AS7343_CH12_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH12_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_F2:
-			reg_read_val = AS7343_read(AS7343_CH6_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH6_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_FZ:
-			reg_read_val = AS7343_read(AS7343_CH0_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH0_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_F3:
-			reg_read_val = AS7343_read(AS7343_CH7_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH7_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_F4:
-			reg_read_val = AS7343_read(AS7343_CH8_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH8_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_F5:
-			reg_read_val = AS7343_read(AS7343_CH13_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH13_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_FY:
-			reg_read_val = AS7343_read(AS7343_CH1_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH1_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_FXL:
-			reg_read_val = AS7343_read(AS7343_CH2_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH2_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_F6:
-			reg_read_val = AS7343_read(AS7343_CH9_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH9_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_F7:
-			reg_read_val = AS7343_read(AS7343_CH14_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH14_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_F8:
-			reg_read_val = AS7343_read(AS7343_CH15_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH15_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_NIR:
-			reg_read_val = AS7343_read(AS7343_CH3_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH3_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		// OTHER CHANNELS --------
-		case AS7343_CHANNEL_CLR_0:
-			reg_read_val = AS7343_read(AS7343_CH16_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH16_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_CLR_1:
-			reg_read_val = AS7343_read(AS7343_CH10_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH10_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_CLR_2:
-			reg_read_val = AS7343_read(AS7343_CH4_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH4_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_FD_0:
-			reg_read_val = AS7343_read(AS7343_CH17_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH17_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_FD_1:
-			reg_read_val = AS7343_read(AS7343_CH11_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH11_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-
-		case AS7343_CHANNEL_FD_2:
-			reg_read_val = AS7343_read(AS7343_CH5_DATA_L);
-			return_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH5_DATA_H);
-			return_val |= (reg_read_val << 8);
-			break;
-	}
-
-	return return_val;
+	return ret_val;
 }
 
 uint8_t AS7343_read(uint8_t reg_addr) {
@@ -342,18 +507,26 @@ uint8_t AS7343_read(uint8_t reg_addr) {
 
 	uint8_t ret_val = I2C_receive();
 
-
 	return ret_val;
 
 }
 
-uint16_t AS7343_read_2b(uint8_t reg_addr_lower_byte) {
-	uint16_t return_val = 0x0000;
-	uint8_t reg_read_val = 0x00;
-	reg_read_val = AS7343_read(reg_addr_lower_byte);
-	return_val |= (reg_read_val << 0);
-	reg_read_val = AS7343_read(reg_addr_lower_byte + 0x01);
-	return_val |= (reg_read_val << 8);
+uint16_t maxValue(uint16_t array[], size_t size) {
+    size_t i;
+    uint16_t maxValue = array[0];
 
-	return return_val;
+    for (i = 1; i < size; ++i) {
+        if ( array[i] > maxValue ) {
+            maxValue = array[i];
+        }
+    }
+    return maxValue;
+}
+
+int u16_f_mulOvf(uint16_t a, float b) {
+	return (a > (0xFFFE/b));
+}
+
+int u8_f_mulOvf(uint8_t a, float b) {
+	return (a > (0xFF/b));
 }

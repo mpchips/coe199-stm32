@@ -38,14 +38,13 @@ int I2C2_transmit_done();
 uint8_t I2C2_receive();
 
 /**
- * @brief Reads one byte of data from slave device
- * */
-uint8_t I2C2_read(uint8_t slave_addr, uint8_t reg_addr);
-
-/**
  * @brief Reads 2 bytes of data (upper + lower) from slave device
  * */
 uint16_t I2C2_read_2b(uint8_t slave_addr, uint8_t reg_upper_addr, uint8_t reg_lower_addr);
 
+/**
+ * @brief Reads one byte of data from slave device
+ * */
+uint8_t I2C2_read(uint8_t slave_addr, uint8_t reg_addr);
 
 #endif /* I2C2_H_ */

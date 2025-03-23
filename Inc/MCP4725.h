@@ -54,7 +54,7 @@ typedef struct MCP
 
 /* function definitions */
 
-MCP4725 	MCP4725_init(I2C_HandleTypeDef* hi2c, MCP4725Ax_ADDRESS addr, float refV);
+MCP4725 	MCP4725_init(MCP4725Ax_ADDRESS addr, float refV);
 
 void		MCP4725_setReferenceVoltage(MCP4725* _MCP4725, float value);
 float		MCP4725_getReferenceVoltage(MCP4725* _MCP4725);
