@@ -28,6 +28,7 @@
   0x80 ///< Main enable register. Controls SMUX, Flicker Detection, Spectral
        ///< Measurements and Power
 #define AS7343_ATIME 0x81       ///< Sets ADC integration step count
+#define AS7343_WTIME 0x83		///< Sets wait time between consecutive measurements
 #define AS7343_SP_LOW_TH_L 0x84 ///< Spectral measurement Low Threshold low byte
 #define AS7343_SP_LOW_TH_H                                                     \
   0x85 ///< Spectral measurement Low Threshold high byte
@@ -253,6 +254,8 @@ void Init_AS7343();
 
 void Init_AS7343_GPIO();
 
+void AS7343_default_config();
+
 /**
  * @brief Simultaneously powers on AS7343 and
  * 	      enables spectral measurement.
@@ -269,6 +272,18 @@ void AS7343_disable();
  * @brief Initiates reset for AS7343.
  * */
 void AS7343_reset();
+
+void AS7343_wait_enable();
+
+void AS7343_wait_disable();
+
+void AS7343_set_wait_time(uint8_t WTIME);
+
+void AS7343_enable_LED();
+
+void AS7343_disable_LED();
+
+void AS7343_set_LED_strength(uint8_t LED_strength);
 
 
 void AS7343_auto_smux(auto_smux_mode auto_smux_mode);
@@ -306,14 +321,18 @@ int AS7343_ASat();
  * */
 int AS7343_DSat();
 
+void AS7343_get_basic_spectrum_optimized(float channel_readings[12], int max_loops);
+
 /**
  * @brief Finds the best parameter configuration to take
  * 		  measurements with. Returns a set of measurements
  * 		  using the best parameters found.
  * */
-void AS7343_get_spectrum_optimized(uint16_t channel_readings[12], int max_loops);
+void AS7343_get_raw_spectrum_optimized(uint16_t channel_readings[12], int max_loops);
 
-void AS7343_get_spectrum();
+void AS7343_get_basic_spectrum(float basic_spectrum[12]);
+
+void AS7343_get_raw_spectrum(uint16_t channel_readings[12]);
 
 /**
  * @brief Read all channels in the vis-NIR spectrum.
@@ -325,6 +344,8 @@ void AS7343_get_spectrum();
  * */
 void AS7343_read_spectrum(uint16_t channel_readings[12]);
 
+void AS7343_raw_to_basic(uint16_t raw_spectrum[12], float basic_spectrum[12]);
+
 uint16_t AS7343_read_channel(AS7343_color_channel_t channel);
 
 uint16_t AS7343_get_ASTEP();
@@ -332,6 +353,8 @@ uint16_t AS7343_get_ASTEP();
 uint8_t AS7343_get_ATIME();
 
 AS7343_gain_t AS7343_get_AGAIN();
+
+uint8_t AS7343_get_LED_strength();
 
 void AS7343_write(uint8_t reg_addr, uint8_t data);
 

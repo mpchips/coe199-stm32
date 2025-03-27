@@ -26,6 +26,7 @@
 #include <string.h>
 #include <AS7343.h>
 #include <I2C1.h>
+#include <I2C2.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -115,8 +116,8 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  Init_AS7343();
 
+  Init_AS7343();
 
   HAL_UART_Transmit(&huart2, banner, sizeof(banner)-1, 1000);
 
@@ -130,7 +131,13 @@ int main(void)
 
   uint16_t readings[12];
 
+  UART_printf("RESETTING AS7343 FIRST...");
   AS7343_reset();
+  UART_printf("SUCCESSFUL.\r\n");
+
+  UART_printf("LOADING DEFAULT CONFIGURATION...");
+  AS7343_default_config();
+  UART_printf("SUCCESSFUL.\r\n");
 
   /* USER CODE END 2 */
 
@@ -142,17 +149,35 @@ int main(void)
 		  pressed = 0;
 		  HAL_UART_Transmit(&huart2, pressed_msg, sizeof(pressed_msg)-1, 1000);
 
-//		  AS7343_conf(AS7343_ASTEP_L, 0x4F);
-//		  AS7343_conf(AS7343_ASTEP_H, 0x46);
+		  AS7343_default_config();
 
-		  AS7343_get_spectrum(readings);
+		  uint8_t ATIME = AS7343_get_ATIME();
+		  uint16_t ASTEP = AS7343_get_ASTEP();
+		  uint8_t AGAIN = AS7343_get_AGAIN();
+		  UART_printf("\r\nATIME = %d", ATIME);
+		  UART_printf("\r\nASTEP = %d", AS7343_get_ASTEP());
+		  UART_printf("\r\nAGAIN = %d\n", AGAIN);
+
+		  UART_printf("\r\nNow finding raw spectrum (unoptimized)...\n");
+		  AS7343_get_raw_spectrum(readings);
+//		  readings[0] = AS7343_read_2b(AS7343_CH12_DATA_L);
+//		  readings[1] = AS7343_read_2b(AS7343_CH6_DATA_L);
 
 		  HAL_UART_Transmit(&huart2, vals, sizeof(vals)-1, 1000);
-
 		  for (int i = 0; i < 12; ++i) {
 			  UART_printf(" | %5d", readings[i]);
 		  }
+		  HAL_UART_Transmit(&huart2, labels, sizeof(labels)-1, 1000);
 
+		  UART_printf("\nNow finding raw spectrum (optimized)...\n");
+		  AS7343_get_raw_spectrum_optimized(readings, 10);
+//		  readings[0] = AS7343_read_2b(AS7343_CH12_DATA_L);
+//		  readings[1] = AS7343_read_2b(AS7343_CH6_DATA_L);
+
+		  HAL_UART_Transmit(&huart2, vals, sizeof(vals)-1, 1000);
+		  for (int i = 0; i < 12; ++i) {
+			  UART_printf(" | %5d", readings[i]);
+		  }
 		  HAL_UART_Transmit(&huart2, labels, sizeof(labels)-1, 1000);
 	  }
     /* USER CODE END WHILE */

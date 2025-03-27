@@ -78,8 +78,8 @@ AS7343_gain_t AGAIN_lookup[13] = {
 
 
 void Init_AS7343() {
-	Init_AS7343_GPIO();
-	Init_I2C();
+//	Init_AS7343_GPIO();
+	Init_I2C1();
 //	Init_AS7343_I2C(); // not needed for F411 implementation
 }
 
@@ -118,8 +118,22 @@ void Init_AS7343_GPIO() {
 
 }
 
+void AS7343_default_config() {
+	AS7343_disable(); // disable and turn off
+	/* Integration time and ADC sensitivity */
+	AS7343_set_ATIME(1);
+	AS7343_set_ASTEP(999);
+	AS7343_set_AGAIN(AS7343_GAIN_256X);
+
+	/* Auto SMUX mode */
+	AS7343_auto_smux(mode2_18ch);
+
+	/* Enable Wait between measurements */
+	AS7343_wait_enable();
+}
+
 void AS7343_enable() {
-	AS7343_write(0b10000000, 0x03);
+	AS7343_write(0b10000000, 0x13);
 }
 
 void AS7343_disable() {
@@ -128,6 +142,41 @@ void AS7343_disable() {
 
 void AS7343_reset() {
 	AS7343_write(AS7343_CONTROL, 1 << 3);
+
+//	AS7343_auto_smux(mode2_18ch);
+//	AS7343_set_ASTEP(99);
+}
+
+void AS7343_wait_enable() {
+	uint8_t temp = AS7343_read(AS7343_ENABLE);
+	uint8_t WEN = 0x08;
+	AS7343_write(AS7343_ENABLE, temp | WEN);
+}
+
+void AS7343_wait_disable() {
+	uint8_t temp = AS7343_read(AS7343_ENABLE);
+	uint8_t WEN = 0x08;
+	AS7343_write(AS7343_ENABLE, temp | WEN);
+}
+
+void AS7343_set_wait_time(uint8_t WTIME) {
+	AS7343_write(AS7343_WTIME, WTIME);
+}
+
+void AS7343_enable_LED() {
+	uint8_t LED_strength = AS7343_get_LED_strength();
+	uint8_t LED_enable = 0b10000000;
+	AS7343_write(AS7343_LED, LED_enable | LED_strength);
+}
+
+void AS7343_disable_LED() {
+	uint8_t LED_strength = AS7343_get_LED_strength();
+	uint8_t LED_disable = 0b00000000;
+	AS7343_write(AS7343_LED, LED_disable | LED_strength);
+}
+
+void AS7343_set_LED_strength(uint8_t LED_strength) {
+	AS7343_write(AS7343_LED, LED_strength & 0x7F);
 }
 
 void AS7343_auto_smux(auto_smux_mode auto_smux_mode) {
@@ -148,15 +197,15 @@ void AS7343_set_ASTEP(uint16_t astep) {
 			AS7343_write(AS7343_ASTEP_H, 0x00);
 		}
 	} else {
-		AS7343_write(AS7343_ASTEP_L, (uint8_t) astep);
-		AS7343_write(AS7343_ASTEP_L, (uint8_t) astep >> 8);
+		AS7343_write(AS7343_ASTEP_L, (uint8_t) astep & 0x00FF);
+		AS7343_write(AS7343_ASTEP_H, (uint8_t) astep >> 8);
 	}
 }
 
 
 void AS7343_set_ATIME(uint8_t atime) {
 	if (atime == 0) {
-		if (AS7343_read_2b(AS7343_ASTEP_L) == 0) {
+		if (AS7343_get_ASTEP() == 0) {
 			AS7343_write(AS7343_ATIME, 0x01); // do not allow ATIME = ASTEP = 0 as per datasheet
 		}
 	} else {
@@ -164,10 +213,14 @@ void AS7343_set_ATIME(uint8_t atime) {
 	}
 }
 
+void AS7343_set_AGAIN(AS7343_gain_t gain) {
+	AS7343_write(AS7343_CFG1, gain);
+}
+
 
 int AS7343_done() {
 	int reg_val = (int) AS7343_read(AS7343_STATUS2);
-	int ret_val = reg_val & 0b00001000;
+	int ret_val = reg_val & 0b01000000;
 	return (ret_val >> 3);
 }
 
@@ -183,7 +236,15 @@ int AS7343_ASat() {
 	return (ret_val >> 3);
 }
 
-void AS7343_get_spectrum_optimized(uint16_t channel_readings[12], int max_loops) {
+void AS7343_get_basic_spectrum_optimized(float channel_readings[12], int max_loops) {
+	uint16_t raw_spectrum[12];
+	AS7343_get_raw_spectrum_optimized(raw_spectrum, max_loops);
+	AS7343_raw_to_basic(raw_spectrum, channel_readings);
+}
+
+void AS7343_get_raw_spectrum_optimized(uint16_t channel_readings[12], int max_loops) {
+	AS7343_default_config(); // reset config
+
 	// for tracking variables
 	uint8_t  	  curr_ATIME = AS7343_get_ATIME();
 	uint16_t 	  curr_ASTEP = AS7343_get_ASTEP();
@@ -191,8 +252,9 @@ void AS7343_get_spectrum_optimized(uint16_t channel_readings[12], int max_loops)
 
 	float factor; // = ADC_MAX/OUT_MAX, measure of how far output is from max possible
 
-	AS7343_get_spectrum(channel_readings);
-	uint16_t OUT_MAX = maxValue(channel_readings, sizeof(channel_readings)/2);
+	AS7343_get_raw_spectrum(channel_readings);
+	uint16_t OUT_MAX = maxValue(channel_readings, 12);
+//	UART_printf("\rCurrent max: %d\n", OUT_MAX);
 
 	int isDigSat = AS7343_DSat(); // digital saturation
 	int isAnaSat = AS7343_ASat(); // analog saturation
@@ -207,16 +269,27 @@ void AS7343_get_spectrum_optimized(uint16_t channel_readings[12], int max_loops)
 	while (loop < max_loops) {
 		++loop;
 
+//		UART_printf("\r\nLoop %2d:", loop);
+//		UART_printf("\r\nATIME: %3d", curr_ATIME);
+//		UART_printf("\r\nASTEP: %3d", curr_ASTEP);
+//		UART_printf("\r\nAGAIN: %3d\n", curr_AGAIN);
+//		UART_printf("\r\nCurrent max: %d", OUT_MAX);
+
+		// NO SATURATION OCCURED ----------------------------------------------------------------//
 		if (!isDigSat && !isAnaSat) { // if no saturation occurs
-			if (OUT_MAX > 50000) { break; } // if output is sufficiently large, we are done
-			if (loop >= max_loops) { break; } // if already at limit, do not further adjust values
+			if (OUT_MAX > 40000) {
+				UART_printf("\rLoop exited: Sufficiently large values.");
+				break; } // if output is sufficiently large, we are done
+			if (loop >= max_loops) {
+				UART_printf("\rLoop exited: Max number of loops.");
+				break; } // if already at limit, do not further adjust values
 											  // and risk saturating final output. stick to latest
 											  // non-saturated measurements.
 
 			// ELSE, DO RE-CONFIGURATION --------------------------------------------------------//
-			factor = 0xFFFF/OUT_MAX;
+			if (OUT_MAX <= 100) { factor = 10; }
+			else { factor = 0xFFFF/OUT_MAX * 0.9; }
 
-			// increase all parameters
 			// try to adjust ASTEP first
 			if (curr_ASTEP == 0xFFFE) { okASTEP = 0; } // if already max, adjust ATIME instead
 			else if (u16_f_mulOvf(curr_ASTEP + 1, factor)) { // check first if will overflow
@@ -253,9 +326,11 @@ void AS7343_get_spectrum_optimized(uint16_t channel_readings[12], int max_loops)
 				}
 			}
 
-			if (!okASTEP && !okATIME && !okAGAIN) { break; } // if nothing can be adjusted, tama na
+			if (!okASTEP && !okATIME && !okAGAIN) {
+				UART_printf("\r\nLoop exited: (sat:none) Can no longer adjust values.\n");
+				break; } // if nothing can be adjusted, tama na
 
-
+		// SOME SATURATION OCCURED --------------------------------------------------------------//
 		} else {
 			// check for both digital and analog saturation
 			if (isDigSat) { // if digital saturated
@@ -287,24 +362,42 @@ void AS7343_get_spectrum_optimized(uint16_t channel_readings[12], int max_loops)
 				}
 
 				// scenarios in which kailangan na natin 'to itigil
-				if (!isDigSat && !okASTEP && !okATIME) {break;} // only analog saturation, but ATIME & ASTEP could not be adjusted
-				if (!okAGAIN && !okASTEP && !okATIME) {break;} // both saturation, none can be adjusted
+				if (!isDigSat && !okASTEP && !okATIME) {
+					UART_printf("\rLoop exited: (sat:ana) values can no longer be adjusted.");
+					break;} // only analog saturation, but ATIME & ASTEP could not be adjusted
+				if (!okAGAIN && !okASTEP && !okATIME) {
+					UART_printf("\rLoop exited: (sat:both) values can no longer be adjusted.");
+					break;} // both saturation, none can be adjusted
 			}
 		}
 
 		// take new measurement; update vals and flags
-		AS7343_get_spectrum(channel_readings);
-		OUT_MAX = maxValue(channel_readings, sizeof(channel_readings)/2);
+		AS7343_get_raw_spectrum(channel_readings);
+		OUT_MAX = maxValue(channel_readings, 12);
 
 		isDigSat = AS7343_DSat(); // digital saturation
 		isAnaSat = AS7343_ASat(); // analog saturation
 
 	} // end of while{}
 
-} // AS7343_get_spectrum_optimized()
+	UART_printf("\r\nOptimized configuration -----------------");
+	UART_printf("\r\nMeasurements: %d", loop);
+	UART_printf("\r\nATIME: %3d", curr_ATIME);
+	UART_printf("\r\nASTEP: %3d", curr_ASTEP);
+	UART_printf("\r\nAGAIN: %3d\n", curr_AGAIN);
 
-void AS7343_get_spectrum(uint16_t channel_readings[12]) {
+} // AS7343_get_raw_spectrum_optimized()
+
+void AS7343_get_basic_spectrum(float basic_spectrum[12]) {
+	uint16_t raw_spectrum[12];
+	AS7343_get_raw_spectrum(raw_spectrum);
+	AS7343_raw_to_basic(raw_spectrum, basic_spectrum);
+}
+
+void AS7343_get_raw_spectrum(uint16_t channel_readings[12]) {
 	AS7343_auto_smux(mode2_18ch);
+//	AS7343_set_LED_strength(199);
+//	AS7343_enable_LED();
 
 	AS7343_enable();
 
@@ -312,14 +405,24 @@ void AS7343_get_spectrum(uint16_t channel_readings[12]) {
 
 	AS7343_read_spectrum(channel_readings);
 
+//	AS7343_disable_LED();
 	AS7343_disable();
-} // AS7343_get_spectrum()
+} // AS7343_get_raw_spectrum()
 
 
 void AS7343_read_spectrum(uint16_t channel_readings[12]) {
 	int i;
 	for (i = 0; i < 12; i++) {
 		channel_readings[i] = AS7343_read_channel(vis_nir_channels[i]);
+	}
+}
+
+void AS7343_raw_to_basic(uint16_t raw_spectrum[12], float basic_spectrum[12]) {
+	AS7343_gain_t gain = AS7343_get_AGAIN();
+	float t_int = (AS7343_get_ATIME() + 1) * (AS7343_get_ASTEP() + 1);
+
+	for (int i=0 ; i < sizeof(raw_spectrum)/2; ++i) {
+		basic_spectrum[i] = (float) raw_spectrum[i]/(gain*t_int); // formula from EVK user manual
 	}
 }
 
@@ -462,7 +565,12 @@ uint16_t AS7343_read_channel(AS7343_color_channel_t channel) {
 }
 
 uint16_t AS7343_get_ASTEP() {
-	return AS7343_read_2b(AS7343_ASTEP_L);
+	uint16_t ret_val = 0x0000;
+	uint8_t low_byte = AS7343_read(AS7343_ASTEP_L);
+	uint8_t high_byte = AS7343_read(AS7343_ASTEP_H);
+	ret_val = (high_byte << 8) | low_byte;
+
+	return ret_val;
 }
 
 uint8_t AS7343_get_ATIME() {
@@ -473,17 +581,21 @@ AS7343_gain_t AS7343_get_AGAIN() {
 	return (AS7343_read(AS7343_CFG1) & 0x0F); // mask reserved bits
 }
 
-void AS7343_write(uint8_t reg_addr, uint8_t data) {
-	I2C_start();
+uint8_t AS7343_get_LED_strength() {
+	return (AS7343_read(AS7343_LED) & 0x7F);
+}
 
-	I2C_transmit_addr(AS7343_CHIP_ADDR_WRITE); // chip-addresswrite
+void AS7343_write(uint8_t reg_addr, uint8_t data) {
+	I2C1_start();
+
+	I2C1_transmit_addr(AS7343_CHIP_ADDR_WRITE); // chip-addresswrite
 
 	while (!(I2C1->SR1 & (1 << 7))); // TxE: wait for Tx to Empty
-	I2C_transmit(reg_addr);
+	I2C1_transmit(reg_addr);
 
-	I2C_transmit(data);
+	I2C1_transmit(data);
 
-	I2C_stop();
+	I2C1_stop();
 }
 
 uint16_t AS7343_read_2b(uint8_t reg_addr_lower_byte) {
@@ -498,14 +610,14 @@ uint16_t AS7343_read_2b(uint8_t reg_addr_lower_byte) {
 }
 
 uint8_t AS7343_read(uint8_t reg_addr) {
-	I2C_start(); // start
-	I2C_transmit_addr(AS7343_CHIP_ADDR_WRITE); // slave addr (write)
-	I2C_transmit(reg_addr); // reg address
+	I2C1_start(); // start
+	I2C1_transmit_addr(AS7343_CHIP_ADDR_WRITE); // slave addr (write)
+	I2C1_transmit(reg_addr); // reg address
 
-	I2C_start(); // restart
-	I2C_transmit_addr(AS7343_CHIP_ADDR_READ); // slave addr (read)
+	I2C1_start(); // restart
+	I2C1_transmit_addr(AS7343_CHIP_ADDR_READ); // slave addr (read)
 
-	uint8_t ret_val = I2C_receive();
+	uint8_t ret_val = I2C1_receive();
 
 	return ret_val;
 
@@ -513,14 +625,14 @@ uint8_t AS7343_read(uint8_t reg_addr) {
 
 uint16_t maxValue(uint16_t array[], size_t size) {
     size_t i;
-    uint16_t maxValue = array[0];
+    int maxValue = (int) array[0];
 
     for (i = 1; i < size; ++i) {
         if ( array[i] > maxValue ) {
-            maxValue = array[i];
+            maxValue = (int) array[i];
         }
     }
-    return maxValue;
+    return (uint16_t) maxValue;
 }
 
 int u16_f_mulOvf(uint16_t a, float b) {

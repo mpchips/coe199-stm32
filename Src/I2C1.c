@@ -18,7 +18,7 @@
 #include <stm32f411xe.h>
 
 
-void Init_I2C() {
+void Init_I2C1() {
 	// 1. enable I2C clock
 	RCC->APB1ENR |= (1<<21);  // enable I2C CLOCK
 
@@ -60,33 +60,33 @@ void Init_I2C() {
 
 }
 
-void I2C_start() {
+void I2C1_start() {
 
 	I2C1->CR1 |= (1 << 8); // generate START
 	while (!(I2C1->SR1 & (1 << 0))); // wait for START condition to finish
 }
 
-void I2C_stop() {
+void I2C1_stop() {
 	I2C1->CR1 |= (1 << 9); // generate STOP
 						   // this is automatically cleared after
 }
 
-void I2C_transmit(uint8_t data) {
+void I2C1_transmit(uint8_t data) {
 	I2C1->DR = data;
-	while (!I2C_transmit_done());
+	while (!I2C1_transmit_done());
 }
 
-void I2C_transmit_addr(uint8_t addr) {
+void I2C1_transmit_addr(uint8_t addr) {
 	I2C1->DR = (addr << 0);
 	while (!(I2C1->SR1 & (1 << 1))); // ADDR flag: "address successfully transmitted"
 	uint16_t _dummy_read = I2C1->SR1 | I2C1->SR2; // dummy read to clear the flag
 }
 
-int I2C_transmit_done() {
+int I2C1_transmit_done() {
 	return (I2C1->SR1 & (1 << 2)); // BTF flag: "byte transfer finished, DR empty"
 }
 
-uint8_t I2C_receive() {
+uint8_t I2C1_receive() {
 	while (!(I2C1->SR1 & (1 << 6))); // (RxNE) wait to receive
 
 	return I2C1->DR; // read received value
