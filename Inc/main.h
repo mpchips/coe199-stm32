@@ -53,7 +53,10 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
-
+void EXTI4_IRQHandler(void);
+void UART_printf(char *format, ...);
+void delay_ms(uint16_t ms);
+void clear_C12880MA_readings(uint16_t C12880_readings[288]);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

@@ -325,8 +325,13 @@ void AS7343_get_basic_spectrum_optimized(float channel_readings[12], int max_loo
 
 /**
  * @brief Finds the best parameter configuration to take
- * 		  measurements with. Returns a set of measurements
- * 		  using the best parameters found.
+ * 		    measurements with. Returns a set of measurements
+ * 		    using the best parameters found.
+ * @param channel_readings 12-long array of uint16_t where
+ *        channel readings will be stored.
+ * @param max_loops The maximum number of times the routine
+ *        will retake measurements and readjust parameters.
+ * @return none
  * */
 void AS7343_get_raw_spectrum_optimized(uint16_t channel_readings[12], int max_loops);
 
@@ -347,6 +352,15 @@ void AS7343_read_spectrum(uint16_t channel_readings[12]);
 void AS7343_raw_to_basic(uint16_t raw_spectrum[12], float basic_spectrum[12]);
 
 uint16_t AS7343_read_channel(AS7343_color_channel_t channel);
+
+/**
+ * @brief Obtains the settings (parameters) applied to the
+ * 		  most recent measurement done.
+ * @param ASTEP (uint16_t) where ASTEP will be stored
+ * @param ATIME (uint8_t) where ATIME will be stored
+ * @param AGAIN (AS7343_gain_t) where AGAIN will be stored
+ */
+void AS7343_get_readings_params(uint16_t ASTEP, uint8_t ATIME, AS7343_gain_t AGAIN);
 
 uint16_t AS7343_get_ASTEP();
 

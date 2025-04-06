@@ -564,6 +564,12 @@ uint16_t AS7343_read_channel(AS7343_color_channel_t channel) {
 	return ret_val;
 }
 
+void AS7343_get_readings_params(uint16_t ASTEP, uint8_t ATIME, AS7343_gain_t AGAIN) {
+	ASTEP = AS7343_get_ASTEP();
+	ATIME = AS7343_get_ATIME();
+	AGAIN = AS7343_get_AGAIN();
+}
+
 uint16_t AS7343_get_ASTEP() {
 	uint16_t ret_val = 0x0000;
 	uint8_t low_byte = AS7343_read(AS7343_ASTEP_L);

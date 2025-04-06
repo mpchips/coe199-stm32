@@ -25,6 +25,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <AS7343.h>
+#include <C12880MA.h>
 #include <I2C1.h>
 #include <I2C2.h>
 /* USER CODE END Includes */
@@ -56,14 +57,16 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
-void UART_printf(char *format, ...);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 int pressed = 0;
-int short_press = 0;
-int long_press = 0;
+uint32_t sensor_clk_cycles;
+int start_conv_flag = 0; // for C12880MA routine
+int start_sig_done = 0;
+//int C12880MA_done = 0; // indicates entire measurement routine is done
 
 static const uint8_t banner[] =
 		"\033[0m\033[2J\033[1;1H"
@@ -82,7 +85,8 @@ static const uint8_t banner[] =
 		"-----------------------------------------------------------------\r\n"
 		"\r\n";
 
-uint16_t channel_readings[12];
+uint16_t AS7343_readings[12];
+uint16_t C12880_readings[288];
 /* USER CODE END 0 */
 
 /**
@@ -117,27 +121,35 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  Init_AS7343();
-
   HAL_UART_Transmit(&huart2, banner, sizeof(banner)-1, 1000);
 
-  uint8_t pressed_msg[] = "\r\nButton was pressed. Taking measurements...\r\n";
+//  uint8_t pressed_msg[] = "\r\nButton was pressed. Taking measurements...\r\n";
+//
+//
+//  uint8_t vals[] = "\r\n  val";
+//  uint8_t labels[] = "\r\n+-----+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+"
+//		  	  	  	 "\r\n   nm |  405  |  425  |  450  |  475  |  515  |  550  |  555  |  600  |  640  |  690  |  745  |  855   "
+//  	  	  	     	 "\r\n   ch |  F1   |  F2   |  FZ   |  F3   |  F4   |  F5   |  FY   |  FXL  |  F6   |  F7   |  F8   |  NIR   \r\n";
 
 
-  uint8_t vals[] = "\r\n  val";
-  uint8_t labels[] = "\r\n+-----+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+"
-		  	  	  	 "\r\n   nm |  405  |  425  |  450  |  475  |  515  |  550  |  555  |  600  |  640  |  690  |  745  |  855   "
-  	  	  	     	 "\r\n   ch |  F1   |  F2   |  FZ   |  F3   |  F4   |  F5   |  FY   |  FXL  |  F6   |  F7   |  F8   |  NIR   \r\n";
+  UART_printf("Initializing AS7343...");
+  Init_AS7343();
+  UART_printf("DONE\r\n");
 
-  uint16_t readings[12];
+  UART_printf("Initializing C12880MA...");
+  Init_C12880MA();
 
-  UART_printf("RESETTING AS7343 FIRST...");
-  AS7343_reset();
-  UART_printf("SUCCESSFUL.\r\n");
+//  UART_printf("RESETTING AS7343 FIRST...");
+//  AS7343_reset();
+//  UART_printf("SUCCESSFUL.\r\n");
+//
+//  UART_printf("LOADING DEFAULT CONFIGURATION...");
+//  AS7343_default_config();
+//  UART_printf("SUCCESSFUL.\r\n");
 
-  UART_printf("LOADING DEFAULT CONFIGURATION...");
-  AS7343_default_config();
-  UART_printf("SUCCESSFUL.\r\n");
+  UART_printf("Now ready.\r\n");
+
+  pressed = 1;
 
   /* USER CODE END 2 */
 
@@ -145,40 +157,82 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  if (sensor_clk_cycles >= 1600000) { // should be ~every second
+		  sensor_clk_cycles = 0; // reset
+		  UART_printf("1600000 sensor CC (1 sec) has passed.\r\n");
+		  NVIC_DisableIRQ(EXTI4_IRQn); // Interrupt disabled for PB4
+		  UART_printf("Interrupt disabled for PB4.\r\n");
+	  }
 	  if (pressed) {
+      clear_C12880MA_readings(C12880_readings);
 		  pressed = 0;
-		  HAL_UART_Transmit(&huart2, pressed_msg, sizeof(pressed_msg)-1, 1000);
+//		  C12880MA_done = 0;
+		  start_sig_done = 0;
+		  start_conv_flag = 0;
 
-		  AS7343_default_config();
+		  UART_printf("Button pressed. Initiating measurement with C12880MA...\r\n");
+//		  C12880MA_start(C12880_readings, 5000, sensor_clk_cycles);
 
-		  uint8_t ATIME = AS7343_get_ATIME();
-		  uint16_t ASTEP = AS7343_get_ASTEP();
-		  uint8_t AGAIN = AS7343_get_AGAIN();
-		  UART_printf("\r\nATIME = %d", ATIME);
-		  UART_printf("\r\nASTEP = %d", AS7343_get_ASTEP());
-		  UART_printf("\r\nAGAIN = %d\n", AGAIN);
+		  ADC1->CR2 |= (1 << 0); // enable ADC
+		  	ADC1->CR2 |= (0b01 << 28); // enable rising edge trigger detection
+		  	// NOTE: we are enabling edge detection here, which will start the ADC
+		  	// immediately, but we will not be saving the values until later
+		  	sensor_clk_cycles = 0; // reset to start count
+		  	UART_printf("(%u) Initializations done. Starting process\r\n", sensor_clk_cycles);
 
-		  UART_printf("\r\nNow finding raw spectrum (unoptimized)...\n");
-		  AS7343_get_raw_spectrum(readings);
-//		  readings[0] = AS7343_read_2b(AS7343_CH12_DATA_L);
-//		  readings[1] = AS7343_read_2b(AS7343_CH6_DATA_L);
+		  	// --------------------- START SIGNAL ---------------------
+		  	GPIOB->ODR |= (1 << 10); // assert START pin
+		  	NVIC_EnableIRQ(EXTI4_IRQn); // start monitoring of TRG signal
 
-		  HAL_UART_Transmit(&huart2, vals, sizeof(vals)-1, 1000);
-		  for (int i = 0; i < 12; ++i) {
-			  UART_printf(" | %5d", readings[i]);
-		  }
-		  HAL_UART_Transmit(&huart2, labels, sizeof(labels)-1, 1000);
+		  	UART_printf("(%u) START asserted. Waiting for on_time to complete.\r\n", sensor_clk_cycles);
 
-		  UART_printf("\nNow finding raw spectrum (optimized)...\n");
-		  AS7343_get_raw_spectrum_optimized(readings, 10);
-//		  readings[0] = AS7343_read_2b(AS7343_CH12_DATA_L);
-//		  readings[1] = AS7343_read_2b(AS7343_CH6_DATA_L);
+		  	while (sensor_clk_cycles <= 50000) {} // wait
+		  	start_sig_done = 1;
+//		  	UART_printf("(%u) on_time done: START deasserted. Waiting for values to be ready, then reading ADC\r\n", sensor_clk_cycles);
 
-		  HAL_UART_Transmit(&huart2, vals, sizeof(vals)-1, 1000);
-		  for (int i = 0; i < 12; ++i) {
-			  UART_printf(" | %5d", readings[i]);
-		  }
-		  HAL_UART_Transmit(&huart2, labels, sizeof(labels)-1, 1000);
+//		  	sensor_clk_cycles = 0; 		// reset again
+		  	GPIOB->ODR &= ~(1 << 10); 	// deassert START pin
+		  	sensor_clk_cycles = 0;
+
+		  	// the rest of the routine is handled by EXTI4 handler
+		  	delay_ms(1);
+
+		  	for (int i=0; i<288; ++i) {
+		  		UART_printf("ch %3d: %5d\r\n", i+1, C12880_readings[i]);
+		  	}
+
+//		  HAL_UART_Transmit(&huart2, pressed_msg, sizeof(pressed_msg)-1, 1000);
+//
+//		  AS7343_default_config();
+//
+//		  uint8_t ATIME = AS7343_get_ATIME();
+//		  uint16_t ASTEP = AS7343_get_ASTEP();
+//		  uint8_t AGAIN = AS7343_get_AGAIN();
+//		  UART_printf("\r\nATIME = %3d", ATIME);
+//		  UART_printf("\r\nASTEP = %3d", AS7343_get_ASTEP());
+//		  UART_printf("\r\nAGAIN = %3d\n", AGAIN);
+//
+//		  UART_printf("\r\nNow finding raw spectrum (unoptimized)...\n");
+//		  AS7343_get_raw_spectrum(AS7343_readings);
+////		  AS7343_readings[0] = AS7343_read_2b(AS7343_CH12_DATA_L);
+////		  AS7343_readings[1] = AS7343_read_2b(AS7343_CH6_DATA_L);
+//
+//		  HAL_UART_Transmit(&huart2, vals, sizeof(vals)-1, 1000);
+//		  for (int i = 0; i < 12; ++i) {
+//			  UART_printf(" | %5d", AS7343_readings[i]);
+//		  }
+//		  HAL_UART_Transmit(&huart2, labels, sizeof(labels)-1, 1000);
+//
+//		  UART_printf("\nNow finding raw spectrum (optimized)...\n");
+//		  AS7343_get_raw_spectrum_optimized(AS7343_readings, 10);
+////		  AS7343_readings[0] = AS7343_read_2b(AS7343_CH12_DATA_L);
+////		  AS7343_readings[1] = AS7343_read_2b(AS7343_CH6_DATA_L);
+//
+//		  HAL_UART_Transmit(&huart2, vals, sizeof(vals)-1, 1000);
+//		  for (int i = 0; i < 12; ++i) {
+//			  UART_printf(" | %5d", AS7343_readings[i]);
+//		  }
+//		  HAL_UART_Transmit(&huart2, labels, sizeof(labels)-1, 1000);
 	  }
     /* USER CODE END WHILE */
 
@@ -204,14 +258,13 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLM = 8;
-  RCC_OscInitStruct.PLL.PLLN = 160;
+  RCC_OscInitStruct.PLL.PLLN = 200;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
   RCC_OscInitStruct.PLL.PLLQ = 4;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
@@ -228,11 +281,10 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
   {
     Error_Handler();
   }
-  HAL_RCC_MCOConfig(RCC_MCO1, RCC_MCO1SOURCE_HSE, RCC_MCODIV_4);
 }
 
 /**
@@ -301,14 +353,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PA8 */
-  GPIO_InitStruct.Pin = GPIO_PIN_8;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  GPIO_InitStruct.Alternate = GPIO_AF0_MCO;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
@@ -322,9 +366,29 @@ static void MX_GPIO_Init(void)
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_PIN) {
 	if( GPIO_PIN == GPIO_PIN_13 ) {
 		pressed = 1;
+		delay_ms(100); // debouncing
 	} else {
 	      __NOP();
 	}
+}
+
+void EXTI4_IRQHandler(void) {
+	++sensor_clk_cycles;
+	if (start_sig_done && (sensor_clk_cycles == 86)) {
+		start_conv_flag = 1; // we can now start storing the result of AD conversion
+	}
+	if (start_sig_done && start_conv_flag && (sensor_clk_cycles != 375)) {
+		C12880_readings[sensor_clk_cycles-86] = ADC1->DR;
+	}
+	if (start_sig_done && start_conv_flag && (sensor_clk_cycles >= 375)) {
+	  	UART_printf("(%d) Finished. Turning off peripherals.\r\n", sensor_clk_cycles);
+
+	  	NVIC_DisableIRQ(EXTI4_IRQn);
+	  	ADC1->CR2 &= ~(0b11 << 28); // disable rising edge trigger detection
+	  	ADC1->CR2 &= ~(1 << 0);
+	}
+	EXTI->PR |= (1 << 4); // clear flag
+
 }
 
 void UART_printf(char *format, ...) {
@@ -334,6 +398,23 @@ void UART_printf(char *format, ...) {
 	vsnprintf(buffer, sizeof(buffer), format, args);
 	va_end(args);
 	HAL_UART_Transmit(&huart2, (uint8_t *)buffer, strlen(buffer), 1000);
+}
+
+void delay_ms(uint16_t ms) {
+	uint32_t tick = 0;
+	uint32_t tick_per_ms = 5000;
+	while (ms > 0) {
+		if (tick >= tick_per_ms) {
+			--ms;
+			tick=0;
+		} else { ++tick; }
+	}
+}
+
+void clear_C12880MA_readings(uint16_t C12880_readings[288]) {
+  for (int i=0; i < 288; ++i) {
+    C12880_readings[i] = 0;
+  }
 }
 
 /* USER CODE END 4 */
