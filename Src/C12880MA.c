@@ -10,10 +10,10 @@
  *    PA9  : video output
  *    PA8  : CLK out (hardwired by STM32)
  *    PB10 : START
- *    PB4  : TRIGGER
- *    PB5  : end-of-scan (EOS)
+ *    PB4  : TRIGGER (connected to EXTI4, for incrementing of sensor_clk_cycles)
+ *    PB3  : end-of-scan (EOS)
  * 	  PA7  : video output (must be shorted with PA9)
- *    PA11 : TRIGGER (must be shorted with PB4)
+ *    PA11 : TRIGGER (must be shorted with PB4; connected to EXTI11, for ADC trigger)
  * 
  * NOTES ON REDUNDANCY OF PINS
  * >> Pins of video output and TRIGGER are redundant. The first
@@ -52,8 +52,8 @@ void Init_C12880MA() {
 	  Init_C12880MA_ADC();
 	  UART_printf("DONE");
 	  UART_printf("\r\n\tTIM2...");
-	  Init_TIM2();
-	  UART_printf("\r\nDONE\r\n");
+	  Init_TIM();
+	  UART_printf("DONE\r\n");
 }
 
 void Init_C12880MA_CLKOUT() {
@@ -83,7 +83,7 @@ void Init_C12880MA_CLKOUT() {
 	RCC->CR |= (1 << 0);  // enable HSI
 	RCC->CR |= (1 << 16); // enable HSE
 
-	// idk if this is needed kinuha ko sa internet habang may tino-troubleshoot
+	// idk if this FLASH eme is needed kinuha ko sa internet habang may tino-troubleshoot
 	FLASH->ACR |= (1 << 8); // enable pre-fetch
 	FLASH->ACR |= (0x1 << 0); // flash wait state = 1
 
@@ -144,10 +144,10 @@ void Init_C12880MA_GPIO() {
 	GPIOC->ODR &= ~(1 << 10); // set as initially LOW
 
 	// C12880MA video pin (PA9) <- SEE Init_ADC()
-	GPIOA->MODER |= (0x11 << 18); // set PA9 as analog mode
+	GPIOA->MODER |= (0b11 << 18); // set PA9 as analog mode
 
 	// C12880MA video pin (PA7) << source of analog for ADC
-	GPIOA->MODER |= (0x11 << 14); // set PA7 as analog mode
+	GPIOA->MODER |= (0b11 << 14); // set PA7 as analog mode
 
 	// C12880MA CLK pin (PA8)
 	GPIOA->MODER |= (1 << 17); // set PA8 as alternate function
@@ -155,23 +155,27 @@ void Init_C12880MA_GPIO() {
 
 	GPIOA->AFR[1] &= ~(0x00000001); // set to MCO1 function (AF0 = 0b0000)
 
-	GPIOA->OTYPER &= ~(1 << 8);
-
 	GPIOA->OSPEEDR |= (0b11 << 16); // set as high speed output
 
-	// C12880MA start pin (PB10)
-	GPIOB->MODER &= ~(1 << 21); // set PB10 as output mode
-	GPIOB->MODER |= (1 << 20);
+	// C12880MA ST pin (PB10)
+	GPIOB->MODER |= (10 << 20); // set PB10 as alternate function
+	GPIOB->PUPDR &= ~(0b11 << 20); // no pull-up/pull-down
+	GPIOB->OSPEEDR |= (0b11 << 20); // high-speed output
 
-	GPIOB->OTYPER &= ~(1 << 10); // push-pull type
+	GPIOB->AFR[1] |= (0x00000100); // set to TIM2_CH3 function (AF1 = 0b0001)
 
-	GPIOB->OSPEEDR |= (1 << 21); // high speed output
-	GPIOB->OSPEEDR |= (1 << 20);
-
-	GPIOB->PUPDR &= ~(1 << 21); // no pull-up, pull-down
-	GPIOB->PUPDR &= ~(1 << 20);
-
-	GPIOB->ODR &= ~(1 << 10); // set as initially LOW
+//	GPIOB->MODER &= ~(1 << 21); // set PB10 as output mode
+//	GPIOB->MODER |= (1 << 20);
+//
+//	GPIOB->OTYPER &= ~(1 << 10); // push-pull type
+//
+//	GPIOB->OSPEEDR |= (1 << 21); // high speed output
+//	GPIOB->OSPEEDR |= (1 << 20);
+//
+//	GPIOB->PUPDR &= ~(1 << 21); // no pull-up, pull-down
+//	GPIOB->PUPDR &= ~(1 << 20);
+//
+//	GPIOB->ODR &= ~(1 << 10); // set as initially LOW
 
 	// C12880MA TRG pin (PB4)
 	GPIOB->MODER &= ~(1 << 9); // set PB4 as input mode
@@ -186,24 +190,43 @@ void Init_C12880MA_GPIO() {
 void Init_C12880MA_EXTI() {
 	RCC->APB2ENR |= (1 << 14); // enable EXTI (SYSCFG)
 
+	//-------------------------------------------------------------------
 	// NOTE: we are configuring interrupt for PB4 pin.
 	// 		 This is for counting the sensor CLK cycles, which
 	//		 will be the basis of the timing of other signals.
 	// 		 EXTI handler is responsible for incrementing count.
+	//-------------------------------------------------------------------
 
 	SYSCFG->EXTICR[1] |= (0x1 << 0); // enable EXTI for PB4 (TRG pin)
-
 	EXTI->IMR |= (1 << 4); // disable mask on EXTI4
+
 	EXTI->RTSR |=  (1 << 4); //  enable  rising edge trigger
 	EXTI->FTSR &= ~(1 << 4); // disable falling edge trigger
 
-	NVIC_SetPriority(EXTI4_IRQn, 2);  // Set Priority
+	NVIC_SetPriority(EXTI4_IRQn, 3);  // Set Priority
 
+	//-------------------------------------------------------------------
 	// NOTE: we are configuring interrupt for PA11 pin (to trigger ADC)
 	// 		 This is to allow interrupt-based triggering of ADC.
+	//-------------------------------------------------------------------
 
 	SYSCFG->EXTICR[2] &= ~(0xF << 12); // enable EXTI for PA11 (TRG pin)
 	EXTI->IMR |= (1 << 11); // disable mask on EXTI11
+
+	// no need to configure edge trigger here
+
+	//-------------------------------------------------------------------
+	// NOTE: we are configuring interrupt for PB3 pin (EOS)
+	// 		 This is to allow interrupt-based end of program.
+	//-------------------------------------------------------------------
+
+	SYSCFG->EXTICR[0] |= (0x1 << 12); // enable EXTI for PB3 (TRG pin)
+	EXTI->IMR |= (1 << 3); // disable mask on EXTI4
+
+	EXTI->RTSR |=  (1 << 3); //  enable  rising edge trigger
+	EXTI->FTSR &= ~(1 << 3); // disable falling edge trigger
+
+	NVIC_SetPriority(EXTI3_IRQn, 2);  // Set Priority
 
 } // Init_C12880MA_EXTI()
 
@@ -250,27 +273,67 @@ void Init_C12880MA_ADC() {
 
 } // Init_C12880MA_ADC()
 
-void Init_TIM2() {
+void Init_TIM() {
+	//////////////////////////////////////////////////////////////////////////////////////////
 	RCC->APB1ENR |= (1 << 0); 	// enable TIM2 (32-bit counter)
-								// this is configured to 160 MHz (APB1 Timer CLK)
+								// this is configured to 100 MHz (APB1 Timer CLK)
+
+	TIM2->PSC |= (49 << 0); // prescaler = 49 + 1 so that f_eff = 2 MHz (same as sensor CLK)
 
 	TIM2->CR1 &= ~(1 << 4); // upcounter
-	TIM2->CR1 &= ~(1 << 3); // one-pulse mode: clear counter every update event
+	TIM2->CR1 |=  (1 << 3); // one-pulse mode: stop counter at update event (UEV)
 
-	TIM2->CR2 &= ~(1 << 7); // CH1 is connected to TI1
+	TIM2->CCR3 	&= ~(0xFFFFFFFF << 0); 	// this sets t_delay before output is toggled
+	TIM2->CCMR2 |=  (1 << 7); 			// OC3CE: OC3 is cleared on HIGH level of ETRF
+	TIM2->CCMR2 |=  (0b111 << 4); 		// OC3M: set OC3 to HIGH at CCR3 match (posedge of ST), then low at ARR match (negedge of ST)
+	TIM2->CCMR2 &= ~(1 << 2);			// OC3FE: CC3 behaves normally; TRGI will not act as compare match
+	TIM2->CCMR2 &= ~(0b11 << 0); 		// CC3S: capture/compare 3 configured as OUTPUT
+	TIM2->CCER  &= ~(1 << 9);			// CC3P: OC3 active high
+	TIM2->CCER 	|=  (1 << 8); 			// CC3E: OC3 is output on corresponding pin (PB10)
+	TIM2->ARR 	|=  (10000); 			// pulse duration default: 5ms (x0.5µs)
+
+	TIM2->CR2 |= (0b010 << 4); // Master Mode: UEV as TRGO
+
+	TIM2->DIER |= (1 << 0); // Update Interrupt Enable
+
+	TIM2->CNT &= ~(0xFFFFFFFF); // set count to 0 (TIM2 is 32-bit)
+	TIM2->CR1 &= ~(1 << 0); // disable TIM2 for now
+
+	//////////////////////////////////////////////////////////////////////////////////////////
+	RCC->APB2ENR |= (1 << 0); 	// enable TIM1 (32-bit counter)
+								// this is configured to 100 MHz (APB2 Timer CLK)
+
+	TIM1->SMCR |= (1 << 15); // inverted ETR (react to negedge to compensate for delayed reaction)
+	TIM1->SMCR |= (1 << 14); // enable External Clock Mode 2
+	TIM1->SMCR &= ~(0b11 << 12); // no prescaler on ET signal
+	TIM1->SMCR &= ~(0xF << 8); // no filter; sample ETR every CC
+	
+	TIM1->SMCR |= (0b001 << 4); // ITR1 (TIM2_TRGO) as trigger source
+	TIM1->SMCR |= (0b110 << 0); // Slave Mode: Trigger Mode - start timer at posedge of TRGI
+
+	TIM1->DIER |= (1 << 0); // Update Interrupt Enable
+
+
+
+	TIM1->ARR = (85 << 0); // count to 85, then generate interrupt
+
+	TIM1->CNT &= ~(0xFFFFFFFF); // set count to 0 (TIM1 is 32-bit)
+	TIM1->CR1 &= ~(1 << 0); // disable TIM1 for now
 }
 
-/**
- * @brief  Initiates measurement with C12880MA spectrometer.
- * @param  channel_readings (uint16_t) 288-long array where each pixel's output value will
- * 		   be stored.
- * @param  on_time (uint32_t) [6, 0xFFFFF] On time of start pulse in terms of
- * 		   sensor clock cycles.
- * @param  sensor_clk_cycles (uint32_t) variable counting number of sensor clock cycles that
- * 		   has passed. Will be modified by the function (reset) and the
- * 		   interrupt handler (increment).
- * @retval none
- * */
+void C12880MA_set_tint(uint32_t tint) {
+	// NOTE: x2 factor is due to time period of sensor CLK
+	// sensor CLK = 2 MHz = 0.5 µs
+	// 1µs/0.5µs = 2 
+	if (tint < 50) {
+		TIM2->ARR = 50*2;
+	} else if (tint > 1000000) {
+		TIM2->ARR = 1000000*2;
+	} else {
+		TIM2->ARR = tint*2;
+	}
+}
+
 void C12880MA_start(uint16_t channel_readings[288], uint32_t on_time, uint32_t sensor_clk_cycles) {
 	ADC1->CR2 |= (1 << 0); // enable ADC
 	ADC1->CR2 |= (0b01 << 28); // enable rising edge trigger detection

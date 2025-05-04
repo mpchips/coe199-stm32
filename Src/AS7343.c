@@ -119,17 +119,33 @@ void Init_AS7343_GPIO() {
 }
 
 void AS7343_default_config() {
+	UART_printf("\r\nLoading Default configuration.");
+
+	UART_printf("\r\n1. Disabling AS7343...");
 	AS7343_disable(); // disable and turn off
+	UART_printf("DONE");
 	/* Integration time and ADC sensitivity */
-	AS7343_set_ATIME(1);
+	UART_printf("\r\n2. Setting ATIME to 0...");
+	AS7343_set_ATIME(0);
+	UART_printf("DONE");
+
+	UART_printf("\r\n2. Setting ASTEP to 999...");
 	AS7343_set_ASTEP(999);
+	UART_printf("DONE");
+
+	UART_printf("\r\n3. Setting AGAIN to 256X...");
 	AS7343_set_AGAIN(AS7343_GAIN_256X);
+	UART_printf("DONE");
 
 	/* Auto SMUX mode */
+	UART_printf("\r\n4. Setting SMUX to 18-channel mode...");
 	AS7343_auto_smux(mode2_18ch);
+	UART_printf("DONE");
 
 	/* Enable Wait between measurements */
+	UART_printf("\r\n5. Enabling wait between measurements...");
 	AS7343_wait_enable();
+	UART_printf("DONE\r\n");
 }
 
 void AS7343_enable() {
@@ -142,9 +158,6 @@ void AS7343_disable() {
 
 void AS7343_reset() {
 	AS7343_write(AS7343_CONTROL, 1 << 3);
-
-//	AS7343_auto_smux(mode2_18ch);
-//	AS7343_set_ASTEP(99);
 }
 
 void AS7343_wait_enable() {
@@ -191,26 +204,16 @@ void AS7343_auto_smux(auto_smux_mode auto_smux_mode) {
 }
 
 void AS7343_set_ASTEP(uint16_t astep) {
-	if (astep == 0) {
-		if (AS7343_read(AS7343_ATIME) == 0) { // do not allow ATIME = ASTEP = 0 as per datasheet
-			AS7343_write(AS7343_ASTEP_L, 0x01);
-			AS7343_write(AS7343_ASTEP_H, 0x00);
-		}
-	} else {
-		AS7343_write(AS7343_ASTEP_L, (uint8_t) astep & 0x00FF);
-		AS7343_write(AS7343_ASTEP_H, (uint8_t) astep >> 8);
-	}
+	if ((astep == 0) && (AS7343_get_ATIME() == 0)) {
+		AS7343_write_2b(AS7343_ASTEP_L, (uint16_t) 0x0001);
+	} else { AS7343_write_2b(AS7343_ASTEP_L, astep); }
 }
 
 
 void AS7343_set_ATIME(uint8_t atime) {
-	if (atime == 0) {
-		if (AS7343_get_ASTEP() == 0) {
+	if ((atime == 0) && (AS7343_get_ASTEP() == 0)) {
 			AS7343_write(AS7343_ATIME, 0x01); // do not allow ATIME = ASTEP = 0 as per datasheet
-		}
-	} else {
-		AS7343_write(AS7343_ATIME, atime);
-	}
+	} else { AS7343_write(AS7343_ATIME, atime); }
 }
 
 void AS7343_set_AGAIN(AS7343_gain_t gain) {
@@ -243,6 +246,8 @@ void AS7343_get_basic_spectrum_optimized(float channel_readings[12], int max_loo
 }
 
 void AS7343_get_raw_spectrum_optimized(uint16_t channel_readings[12], int max_loops) {
+	AS7343_enable();
+	UART_printf("\r\n\nOPTIMIZED ROUTINE START ----------------------------------------");
 	AS7343_default_config(); // reset config
 
 	// for tracking variables
@@ -254,6 +259,8 @@ void AS7343_get_raw_spectrum_optimized(uint16_t channel_readings[12], int max_lo
 
 	AS7343_get_raw_spectrum(channel_readings);
 	uint16_t OUT_MAX = maxValue(channel_readings, 12);
+
+	UART_printf("\r\nInitial measurement done.");
 //	UART_printf("\rCurrent max: %d\n", OUT_MAX);
 
 	int isDigSat = AS7343_DSat(); // digital saturation
@@ -268,6 +275,8 @@ void AS7343_get_raw_spectrum_optimized(uint16_t channel_readings[12], int max_lo
 
 	while (loop < max_loops) {
 		++loop;
+		UART_printf("\r\n\nITERATION #%d", loop);
+		UART_printf("\r\nCURRENT MAX: %d", OUT_MAX);
 
 //		UART_printf("\r\nLoop %2d:", loop);
 //		UART_printf("\r\nATIME: %3d", curr_ATIME);
@@ -277,7 +286,7 @@ void AS7343_get_raw_spectrum_optimized(uint16_t channel_readings[12], int max_lo
 
 		// NO SATURATION OCCURED ----------------------------------------------------------------//
 		if (!isDigSat && !isAnaSat) { // if no saturation occurs
-			if (OUT_MAX > 40000) {
+			if (OUT_MAX > 30000) {
 				UART_printf("\rLoop exited: Sufficiently large values.");
 				break; } // if output is sufficiently large, we are done
 			if (loop >= max_loops) {
@@ -380,7 +389,7 @@ void AS7343_get_raw_spectrum_optimized(uint16_t channel_readings[12], int max_lo
 
 	} // end of while{}
 
-	UART_printf("\r\nOptimized configuration -----------------");
+	UART_printf("\r\n\nOptimized configuration -----------------");
 	UART_printf("\r\nMeasurements: %d", loop);
 	UART_printf("\r\nATIME: %3d", curr_ATIME);
 	UART_printf("\r\nASTEP: %3d", curr_ASTEP);
@@ -395,22 +404,17 @@ void AS7343_get_basic_spectrum(float basic_spectrum[12]) {
 }
 
 void AS7343_get_raw_spectrum(uint16_t channel_readings[12]) {
-	AS7343_auto_smux(mode2_18ch);
-//	AS7343_set_LED_strength(199);
-//	AS7343_enable_LED();
-
 	AS7343_enable();
 
 	while (!AS7343_done()); // wait for measurement to finish
-
 	AS7343_read_spectrum(channel_readings);
 
-//	AS7343_disable_LED();
 	AS7343_disable();
 } // AS7343_get_raw_spectrum()
 
 
 void AS7343_read_spectrum(uint16_t channel_readings[12]) {
+	while (!AS7343_readings_valid()) {} // wait for readings to be valid
 	int i;
 	for (i = 0; i < 12; i++) {
 		channel_readings[i] = AS7343_read_channel(vis_nir_channels[i]);
@@ -434,38 +438,23 @@ uint16_t AS7343_read_channel(AS7343_color_channel_t channel) {
 	switch (channel)
 	{
 		case AS7343_CHANNEL_F1:
-			reg_read_val = AS7343_read(AS7343_CH12_DATA_L);
-			ret_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH12_DATA_H);
-			ret_val |= (reg_read_val << 8);
+			ret_val = AS7343_read_2b(AS7343_CH12_DATA_L);
 			break;
 
 		case AS7343_CHANNEL_F2:
-			reg_read_val = AS7343_read(AS7343_CH6_DATA_L);
-			ret_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH6_DATA_H);
-			ret_val |= (reg_read_val << 8);
+			ret_val = AS7343_read_2b(AS7343_CH6_DATA_L);
 			break;
 
 		case AS7343_CHANNEL_FZ:
-			reg_read_val = AS7343_read(AS7343_CH0_DATA_L);
-			ret_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH0_DATA_H);
-			ret_val |= (reg_read_val << 8);
+			ret_val = AS7343_read_2b(AS7343_CH0_DATA_L);
 			break;
 
 		case AS7343_CHANNEL_F3:
-			reg_read_val = AS7343_read(AS7343_CH7_DATA_L);
-			ret_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH7_DATA_H);
-			ret_val |= (reg_read_val << 8);
+			ret_val = AS7343_read_2b(AS7343_CH7_DATA_L);
 			break;
 
 		case AS7343_CHANNEL_F4:
-			reg_read_val = AS7343_read(AS7343_CH8_DATA_L);
-			ret_val |= (reg_read_val << 0);
-			reg_read_val = AS7343_read(AS7343_CH8_DATA_H);
-			ret_val |= (reg_read_val << 8);
+			ret_val = AS7343_read_2b(AS7343_CH8_DATA_L);
 			break;
 
 		case AS7343_CHANNEL_F5:
@@ -564,6 +553,10 @@ uint16_t AS7343_read_channel(AS7343_color_channel_t channel) {
 	return ret_val;
 }
 
+int AS7343_readings_valid() {
+	return (AS7343_read(AS7343_STATUS2) & 0x40) >> 6;
+}
+
 void AS7343_get_readings_params(uint16_t ASTEP, uint8_t ATIME, AS7343_gain_t AGAIN) {
 	ASTEP = AS7343_get_ASTEP();
 	ATIME = AS7343_get_ATIME();
@@ -571,11 +564,7 @@ void AS7343_get_readings_params(uint16_t ASTEP, uint8_t ATIME, AS7343_gain_t AGA
 }
 
 uint16_t AS7343_get_ASTEP() {
-	uint16_t ret_val = 0x0000;
-	uint8_t low_byte = AS7343_read(AS7343_ASTEP_L);
-	uint8_t high_byte = AS7343_read(AS7343_ASTEP_H);
-	ret_val = (high_byte << 8) | low_byte;
-
+	uint16_t ret_val = AS7343_read_2b(AS7343_ASTEP_L);
 	return ret_val;
 }
 
@@ -589,6 +578,14 @@ AS7343_gain_t AS7343_get_AGAIN() {
 
 uint8_t AS7343_get_LED_strength() {
 	return (AS7343_read(AS7343_LED) & 0x7F);
+}
+
+void AS7343_write_2b(uint8_t reg_addr_low, uint16_t data) {
+	uint8_t data_low_byte = data | 0x00;
+	uint8_t data_high_byte = (data>>8) | 0x00;
+
+	AS7343_write(reg_addr_low, data_low_byte);
+	AS7343_write(reg_addr_low+1, data_high_byte);
 }
 
 void AS7343_write(uint8_t reg_addr, uint8_t data) {
@@ -606,11 +603,9 @@ void AS7343_write(uint8_t reg_addr, uint8_t data) {
 
 uint16_t AS7343_read_2b(uint8_t reg_addr_lower_byte) {
 	uint16_t ret_val = 0x0000;
-	uint8_t reg_read_val = 0x00;
-	reg_read_val = AS7343_read(reg_addr_lower_byte);
-	ret_val |= (reg_read_val << 0);
-	reg_read_val = AS7343_read(reg_addr_lower_byte + 0x01);
-	ret_val |= (reg_read_val << 8);
+	uint8_t low_byte = AS7343_read(reg_addr_lower_byte);
+	uint8_t high_byte = AS7343_read(reg_addr_lower_byte+1);
+	ret_val = (high_byte << 8) | low_byte;
 
 	return ret_val;
 }
@@ -640,6 +635,29 @@ uint16_t maxValue(uint16_t array[], size_t size) {
     }
     return (uint16_t) maxValue;
 }
+
+uint16_t minValue(uint16_t array[], size_t size) {
+    size_t i;
+    int minValue = (int) array[0];
+
+    for (i = 1; i < size; ++i) {
+        if ( array[i] < minValue ) {
+            minValue = (int) array[i];
+        }
+    }
+    return (uint16_t) minValue;
+}
+
+uint32_t arraySum(uint16_t array[], size_t size) {
+    size_t i;
+    uint32_t sum = 0x00000000;
+
+    for (i = 0; i < size; ++i) {
+        sum += (uint32_t) array[i];
+    }
+    return sum;
+}
+
 
 int u16_f_mulOvf(uint16_t a, float b) {
 	return (a > (0xFFFE/b));

@@ -353,9 +353,12 @@ void AS7343_raw_to_basic(uint16_t raw_spectrum[12], float basic_spectrum[12]);
 
 uint16_t AS7343_read_channel(AS7343_color_channel_t channel);
 
+int AS7343_readings_valid();
+
 /**
  * @brief Obtains the settings (parameters) applied to the
- * 		  most recent measurement done.
+ * 		  sensor currently. DOES NOT necessarily equal the parameters
+ * 		  applied to most recent measurement.
  * @param ASTEP (uint16_t) where ASTEP will be stored
  * @param ATIME (uint8_t) where ATIME will be stored
  * @param AGAIN (AS7343_gain_t) where AGAIN will be stored
@@ -370,13 +373,42 @@ AS7343_gain_t AS7343_get_AGAIN();
 
 uint8_t AS7343_get_LED_strength();
 
+void AS7343_write_2b(uint8_t reg_addr_low, uint16_t data);
+
 void AS7343_write(uint8_t reg_addr, uint8_t data);
 
 uint8_t AS7343_read(uint8_t reg_addr);
 
 uint16_t AS7343_read_2b(uint8_t reg_addr_lower_byte);
 
+void clear_AS7343_readings();
+
+/**
+ * @brief Takes array and returns the maximum value in
+ *        that array.
+ * @param array of type uint16_t
+ * @param size (size_t) size of the param array
+ * @retval uint16_t The maximum value in that array
+ */
 uint16_t maxValue(uint16_t array[], size_t size);
+
+/**
+ * @brief Takes array and returns the minimum value in
+ *        that array.
+ * @param array of type uint16_t
+ * @param size (size_t) size of the param array
+ * @retval uint16_t The minimum value in that array
+ */
+uint16_t minValue(uint16_t array[], size_t size);
+
+/**
+ * @brief Takes array and returns the average of all
+ * 		  values in that array.
+ * @param array of type uint16_t
+ * @param size (size_t) size of the param array
+ * @retval float The average of all values in array.
+ */
+uint32_t arraySum(uint16_t array[], size_t size);
 
 int u16_f_mulOvf(uint16_t a, float b);
 
