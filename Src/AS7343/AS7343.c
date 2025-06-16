@@ -1,19 +1,15 @@
 /*
- * C12880MA.c
+ * AS7343.c
  *
  *  Created on: Feb 6, 2025
  *      Author: moreypiatos
  *
- * Designed to interface using GroupGets LLC.
- * C12880MA Breakout Board
+ * For the ams OSRAM AS7343 Spectrometer Sensor
  *
  * PIN LAYOUT
- *    PC7  : LED control (unused)
- *    PA9  : video output
- *    PA8  : CLK out
- *    PB10 : START
- *    PB4  : TRIGGER
- *    PB5  : end-of-scan (EOS)
+ * 	  PB5: LED 3.3V
+ *    PB8: I2C1_SCL
+ *    PB9: I2C1_SDA
  */
 
 #include <stdio.h>
@@ -80,13 +76,20 @@ AS7343_gain_t AGAIN_lookup[13] = {
 void Init_AS7343() {
 //	Init_AS7343_GPIO();
 	Init_I2C1();
-//	Init_AS7343_I2C(); // not needed for F411 implementation
 }
 
 void Init_AS7343_GPIO() {
 	if (!(RCC->AHB1ENR & (1 << 1))) { // enable GPIOB
 		RCC->AHB1ENR |= (1 << 1);
 	}
+
+	// GENERAL LED out pin (PB5)
+	GPIOB->MODER &= ~(1 << 11); // set PB5 as output mode
+	GPIOB->MODER |=  (1 << 10);
+
+	GPIOB->OSPEEDR |=  (0b11 << 10); // high speed output
+
+	GPIOB->ODR &= ~(1 << 5); // set low for now
 
 	// AS7343L SCL pin (PB8)
 	GPIOB->MODER |= (1 << 17); // set PB8 as alternate function
@@ -116,6 +119,14 @@ void Init_AS7343_GPIO() {
 	GPIOB->PUPDR &= ~(1 << 19); // pull-up
 	GPIOB->PUPDR |=  (1 << 18);
 
+}
+
+void set_LED_on() {
+	GPIOB->ODR |=  (1 << 5); // set high
+}
+
+void set_LED_off() {
+	GPIOB->ODR &= ~(1 << 5); // set low
 }
 
 void AS7343_default_config() {

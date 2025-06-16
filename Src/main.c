@@ -26,6 +26,8 @@
 #include <string.h>
 #include <AS7343.h>
 #include <C12880MA.h>
+#include <cJSON.h>
+#include <to_ESP32.h>
 #include <I2C1.h>
 #include <I2C2.h>
 /* USER CODE END Includes */
@@ -69,6 +71,8 @@ int start_conv_flag = 0; // for C12880MA routine
 int start_sig_done = 0;
 uint16_t ADC_readings[6000] = {0};
 int adc_char_done;
+
+char *txb_ptr = 0; // for transmitting to ESP32 via I2C
 //int C12880MA_done = 0; // indicates entire measurement routine is done
 
 typedef enum {
@@ -254,7 +258,11 @@ int main(void)
 
  		  clear_AS7343_readings();
 
- 		  AS7343_default_config();
+// 		  AS7343_default_config();
+
+ 		  AS7343_set_ATIME(1);
+ 		  AS7343_set_ASTEP(65534);
+ 		  AS7343_set_AGAIN(AS7343_GAIN_256X);
 
  		  uint8_t ATIME = AS7343_get_ATIME();
  		  uint16_t ASTEP = AS7343_get_ASTEP();
@@ -275,15 +283,13 @@ int main(void)
  		  HAL_UART_Transmit(&huart2, labels, sizeof(labels)-1, 1000);
 
 
- 		  AS7343_reset();
-
  		  UART_printf("\nNow finding raw spectrum (optimized). Resetting first... ");
  		  AS7343_reset();
  		  AS7343_default_config();
  		  UART_printf("reset and config done\r\n");
  		  AS7343_get_raw_spectrum_optimized(AS7343_readings, 10);
- //		  AS7343_readings[0] = AS7343_read_2b(AS7343_CH12_DATA_L);
- //		  AS7343_readings[1] = AS7343_read_2b(AS7343_CH6_DATA_L);
+ 		  AS7343_readings[0] = AS7343_read_2b(AS7343_CH12_DATA_L);
+ 		  AS7343_readings[1] = AS7343_read_2b(AS7343_CH6_DATA_L);
 
  		  HAL_UART_Transmit(&huart2, vals, sizeof(vals)-1, 1000);
  		  for (int i = 0; i < 12; ++i) {

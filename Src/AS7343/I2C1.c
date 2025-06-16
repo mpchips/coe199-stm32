@@ -7,8 +7,8 @@
  * Uses STM32F411 I2C1 peripheral
  *
  * PIN LAYOUT
- *    PB8  : SDA
- *    PB9  : SCL
+ *    PB7  : SDA
+ *    PB8  : SCL
  */
 
 #include <I2C1.h>
@@ -17,23 +17,50 @@
 #include <stm32f4xx.h>
 #include <stm32f411xe.h>
 
+#define I2C1_SDA_PIN 9 // uses GPIOB
+#define I2C1_SCL_PIN 8 // uses GPIOB
+
 
 void Init_I2C1() {
 	// 1. enable I2C clock
 	RCC->APB1ENR |= (1<<21);  // enable I2C CLOCK
 
-	// 2. configure I2C pins
-	GPIOB->MODER |= (2<<16); // PB8
-	GPIOB->MODER |= (2<<18); // PB9
+//	// 2. configure I2C pins
+//	GPIOB->MODER |= (2<<14); // PB7
+//	GPIOB->MODER |= (2<<16); // PB8
+//
+//	GPIOB->OTYPER |= (1<<7); // open-drain
+//	GPIOB->OTYPER |= (1<<8); // open-drain
+//
+//	GPIOB->OSPEEDR |= (3<<14) | (3<<16); // high-speed output
+//
+//	GPIOB->PUPDR |= (1<<14) | (1<<16); // pull-up
+//
+//	GPIOB->AFR[1] |= (4<<0); // alternate function 4
+//	GPIOB->AFR[0] |= (4<<28); // alternate function 4
 
-	GPIOB->OTYPER |= (1<<8); // open-drain
-	GPIOB->OTYPER |= (1<<9); // open-drain
+	// 2. configure I2C2 pins
+	GPIOB->MODER |= (2 << (I2C1_SDA_PIN*2)); // PB8
+	GPIOB->MODER |= (2 << (I2C1_SCL_PIN*2)); // PB9
 
-	GPIOB->OSPEEDR |= (3<<16) | (3<<18); // high-speed output
+	GPIOB->OTYPER |= (1 << I2C1_SDA_PIN); // open-drain
+	GPIOB->OTYPER |= (1 << I2C1_SCL_PIN); // open-drain
 
-	GPIOB->PUPDR |= (1<<16) | (1<<18); // pull-up
+	GPIOB->OSPEEDR |= (3 << (I2C1_SDA_PIN*2)) | (3 << (I2C1_SCL_PIN*2)); // high-speed output
 
-	GPIOB->AFR[1] |= (4<<0) | (4<<4); // alternate function 4
+	GPIOB->PUPDR |= (1 << (I2C1_SDA_PIN*2)) | (1 << (I2C1_SCL_PIN*2)); // pull-up
+
+	if (I2C1_SDA_PIN >= 8) {
+		GPIOB->AFR[1] |= 4 << ((I2C1_SDA_PIN-8)*4); // alternate function 4
+	} else {
+		GPIOB->AFR[0] |= 4 << (I2C1_SDA_PIN*4); // alternate function 4
+	}
+
+	if (I2C1_SCL_PIN >= 8) {
+		GPIOB->AFR[1] |= 4 << ((I2C1_SCL_PIN-8)*4); // alternate function 4
+	} else {
+		GPIOB->AFR[0] |= 4 << (I2C1_SCL_PIN*4); // alternate function 4
+	}
 
 	// 3. reset I2C
 	I2C1->CR1 &= ~(1 << 0);	// peripheral disable (reset)

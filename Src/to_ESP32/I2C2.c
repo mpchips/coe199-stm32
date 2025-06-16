@@ -7,8 +7,8 @@
  * Uses STM32F411 I2C2 peripheral in standard mode.
  *
  * PIN LAYOUT
- *    PB10  : SDA
- *    PB11  : SCL
+ *    PB9   : SDA
+ *    PB10  : SCL
  */
 
 #include <I2C2.h>
@@ -19,8 +19,8 @@
 
 
 /* DEFINE THE FF VALUES BELOW FOR INITIALIZATION */
-#define I2C2_SDA_PIN 10 // will automatically use GPIOB
-#define I2C2_SCL_PIN 11 // will automatically use GPIOB
+#define I2C2_SDA_PIN 9 // will automatically use GPIOB
+#define I2C2_SCL_PIN 10 // will automatically use GPIOB
 
 #define APB1_CLK_FREQ_MHZ 40 // configured clock frequency of APB1 (default = 16)
 #define I2C2_SCL_FREQ_KHZ 2500 // target I2C2_SCL frequency
@@ -95,6 +95,19 @@ void Init_I2C2() {
 	I2C2->CR1 |= (1 << 0); // peripheral enable
 
 }
+
+void I2C2_transmit_buf(uint8_t SLAVE_ADDR_WRITE, char *buf) {
+	I2C2_start();
+
+	I2C2_transmit_addr(SLAVE_ADDR_WRITE); // chip-addresswrite
+
+	while (!(I2C1->SR1 & (1 << 7))); // TxE: wait for Tx to Empty
+
+	I2C2_transmit(&buf);
+
+	I2C2_stop();
+}
+
 
 void I2C2_start() {
 

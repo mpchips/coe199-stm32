@@ -141,7 +141,7 @@ void Init_C12880MA_GPIO() {
 	GPIOC->PUPDR &= ~(1 << 15); // no pull-up, pull-down
 	GPIOC->PUPDR &= ~(1 << 14);
 
-	GPIOC->ODR &= ~(1 << 10); // set as initially LOW
+	GPIOC->ODR &= ~(1 << 7); // set as initially LOW
 
 	// C12880MA video pin (PA9) <- SEE Init_ADC()
 	GPIOA->MODER |= (0b11 << 18); // set PA9 as analog mode
