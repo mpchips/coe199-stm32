@@ -12,7 +12,7 @@
  *    PB10 : START
  *    PB4  : TRIGGER (connected to EXTI4, for incrementing of sensor_clk_cycles)
  *    PB3  : end-of-scan (EOS)
- * 	  PA7  : video output (must be shorted with PA9)
+ * 	  PA3  : video output (must be shorted with PA9; ADC_ch3)
  *    PA11 : TRIGGER (must be shorted with PB4; connected to EXTI11, for ADC trigger)
  * 
  * NOTES ON REDUNDANCY OF PINS
@@ -146,8 +146,8 @@ void Init_C12880MA_GPIO() {
 	// C12880MA video pin (PA9) <- SEE Init_ADC()
 	GPIOA->MODER |= (0b11 << 18); // set PA9 as analog mode
 
-	// C12880MA video pin (PA7) << source of analog for ADC
-	GPIOA->MODER |= (0b11 << 14); // set PA7 as analog mode
+	// C12880MA video pin (PA6) << source of analog for ADC
+	GPIOA->MODER |= (0b11 << 12); // set PA6 as analog mode
 
 	// C12880MA CLK pin (PA8)
 	GPIOA->MODER |= (1 << 17); // set PA8 as alternate function
@@ -258,7 +258,9 @@ void Init_C12880MA_ADC() {
 	ADC1->SQR1 &= ~(0xF << 20); // 1 conversion only
 
 	//assign channel for first conversion
-	ADC1->SQR3 |= (0b0111 << 0); // first (and only) conversion to channel 7 (PA7)
+	ADC1->SQR3 |= (0b00110 << 0); // first (and only) conversion to channel 6 (PA6)
+
+	ADC1->CR2 |= (0b01 << 28); // trigger ADC on rising edge of EXTI
 
 	ADC1->CR2 |= (0xF << 24); // EXTSEL: pick EXTI line 11 as source of trigger
 

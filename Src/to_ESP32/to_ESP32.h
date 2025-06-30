@@ -12,7 +12,7 @@
 #include <cJSON.h>
 #include <I2C2.h>
 
-#define ESP32_SLAVE_ADDR 0x08
+#define ESP32_SLAVE_ADDR 0x28
 #define ESP32_SLAVE_ADDR_WRITE (ESP32_SLAVE_ADDR << 1)
 #define ESP32_SLAVE_ADDR_READ  (ESP32_SLAVE_ADDR << 1) + 0x01
 #define LOCAL_DEVICE_ID "spectral_node" // REPLACE THIS WITH ACTUAL CODENAME (to be requested)
