@@ -181,31 +181,39 @@ int main(void)
 		  ///////////////////////////////////////////////////////////////////////////////////
 		  ///////////////////////// ADC CHARACTERIZATION ROUTINE ////////////////////////////
 		  ///////////////////////////////////////////////////////////////////////////////////
-		  UART_printf("Button pressed. Initiating measurement 6000 ADC Measurements...\r\n");
+//		  UART_printf("Button pressed. Initiating measurement 6000 ADC Measurements...\r\n");
+//		  BUTTON_PRESS = NOT_PRESSED;
+//		  int adc_char_done = 0;
+//		  ADC_readings[200] = 0;
+//		  sensor_clk_cycles = 0;
+//		  ADC1->CR2 |= (1 << 0); // enable ADC
+//		  NVIC_EnableIRQ(EXTI4_IRQn); // Interrupt enabled for PB4
+//		  UART_printf("\r\n(%d) All initialization done. Recording ADC\r\n", sensor_clk_cycles);
+//
+//		  delay_ms(1);
+//
+//		  NVIC_DisableIRQ(EXTI4_IRQn); // Interrupt disabled for PB4
+//		  ADC1->CR2 &= ~(1 << 0); // disable ADC
+//		  UART_printf("\r\n(%d) All initialization done. Recording ADC\r\n", sensor_clk_cycles);
+//		  for (int i = 0; i < 200; ++i) {
+//			  UART_printf("\r\n%3d: %4d", i, ADC_readings[i]);
+//		  }
+//
+//		  uint16_t min = minValue(ADC_readings, 200);
+//		  uint16_t max = maxValue(ADC_readings, 200);
+//		  uint32_t sum = arraySum(ADC_readings, 200);
+//		  UART_printf("\r\nSum: %d", sum); // cant print variable avg, ewan kung baket
+//		  UART_printf("\r\nMin: %7d", min);
+//		  UART_printf("\r\nMax: %7d", max);
+//		  UART_printf("\r\nRange: %5d", max-min);
+
+		  ///////////////////////////////////////////////////////////////////////////////////
+		  ///////////////////////////// NEW C12880MA ROUTINE ////////////////////////////////
+		  ///////////////////////////////////////////////////////////////////////////////////
 		  BUTTON_PRESS = NOT_PRESSED;
-		  int adc_char_done = 0;
-		  ADC_readings[200] = 0;
-		  sensor_clk_cycles = 0;
-		  ADC1->CR2 |= (1 << 0); // enable ADC
-		  NVIC_EnableIRQ(EXTI4_IRQn); // Interrupt enabled for PB4
-		  UART_printf("\r\n(%d) All initialization done. Recording ADC\r\n", sensor_clk_cycles);
+		  UART_printf("Button pressed. Initiating measurement with C12880MA...\r\n");
 
-		  delay_ms(1);
-
-		  NVIC_DisableIRQ(EXTI4_IRQn); // Interrupt disabled for PB4
-		  ADC1->CR2 &= ~(1 << 0); // disable ADC
-		  UART_printf("\r\n(%d) All initialization done. Recording ADC\r\n", sensor_clk_cycles);
-		  for (int i = 0; i < 200; ++i) {
-			  UART_printf("\r\n%3d: %4d", i, ADC_readings[i]);
-		  }
-
-		  uint16_t min = minValue(ADC_readings, 200);
-		  uint16_t max = maxValue(ADC_readings, 200);
-		  uint32_t sum = arraySum(ADC_readings, 200);
-		  UART_printf("\r\nSum: %d", sum); // cant print variable avg, ewan kung baket
-		  UART_printf("\r\nMin: %7d", min);
-		  UART_printf("\r\nMax: %7d", max);
-		  UART_printf("\r\nRange: %5d", max-min);
+		  C12880MA_ST(10000);
 
 
 		  ///////////////////////////////////////////////////////////////////////////////////
