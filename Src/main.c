@@ -22,6 +22,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <stdint.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <string.h>
 #include <AS7343.h>
@@ -48,6 +50,9 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim3;
+
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
@@ -58,6 +63,8 @@ UART_HandleTypeDef huart2;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_TIM1_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 void TIM3_Init(void);
 void UART_printf(char *format, ...);
@@ -100,7 +107,8 @@ static const uint8_t banner[] =
 		"-----------------------------------------------------------------\r\n"
 		"\r\n";
 
-uint16_t AS7343_readings[12];
+uint64_t AS7343_reads_cumm[12];
+uint16_t AS7343_reads_curr[12];
 uint16_t C12880_readings[288];
 /* USER CODE END 0 */
 
@@ -134,6 +142,8 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+  MX_TIM1_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 
   HAL_UART_Transmit(&huart2, banner, sizeof(banner)-1, 1000);
@@ -142,10 +152,11 @@ int main(void)
 
 
   uint8_t vals[] = "\r\n  val";
-  uint8_t labels[] = "\r\n+-----+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+-------+"
-		  	  	  	     "\r\n   nm |  405  |  425  |  450  |  475  |  515  |  550  |  555  |  600  |  640  |  690  |  745  |  855   "
-  	  	  	     	   "\r\n   ch |  F1   |  F2   |  FZ   |  F3   |  F4   |  F5   |  FY   |  FXL  |  F6   |  F7   |  F8   |  NIR   \r\n";
-
+  uint8_t labels[] = "\r\n+-----+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+"
+		  	  	  	     "\r\n   nm |   405   |   425   |   450   |   475   |   515   |   550   |   555   |   600   |   640   |   690   |   745   |   855   "
+  	  	  	     	   "\r\n   ch |   F1    |   F2    |   FZ    |   F3    |   F4    |   F5    |   FY    |   FXL   |   F6    |   F7    |   F8    |   NIR   \r\n";
+  uint8_t divider[] = "\r\n+-----+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+";
+  int reps = 20;
 //  UART_printf("Initializing ESP32 comm...");
 //  Init_I2C2();
 //  UART_printf("DONE\r\n");
@@ -156,7 +167,6 @@ int main(void)
 
   UART_printf("Initializing C12880MA...");
   Init_C12880MA();
-
   UART_printf("Now ready.\r\n");
 
 
@@ -212,8 +222,7 @@ int main(void)
 		  ///////////////////////////////////////////////////////////////////////////////////
 		  BUTTON_PRESS = NOT_PRESSED;
 		  UART_printf("Button pressed. Initiating measurement with C12880MA...\r\n");
-
-		  C12880MA_ST(10000);
+		  C12880MA_ST(300);
 
 
 		  ///////////////////////////////////////////////////////////////////////////////////
@@ -271,12 +280,12 @@ int main(void)
 //		  BUTTON_PRESS = NOT_PRESSED;
 // 		  HAL_UART_Transmit(&huart2, pressed_msg, sizeof(pressed_msg)-1, 1000);
 //
-// 		  clear_AS7343_readings();
+// 		  clear_AS7343_readings(AS7343_reads_curr);
 //
-// 		  AS7343_default_config();
+//// 		  AS7343_default_config();
 //
 // 		  AS7343_set_ATIME(1);
-// 		  AS7343_set_ASTEP(19999);
+// 		  AS7343_set_ASTEP(26999);
 // 		  AS7343_set_AGAIN(AS7343_GAIN_256X);
 //
 // 		  uint8_t ATIME = AS7343_get_ATIME();
@@ -287,17 +296,28 @@ int main(void)
 // 		  UART_printf("\r\nAGAIN = %3d\n", AGAIN);
 //
 // 		  UART_printf("\r\nNow finding raw spectrum (unoptimized)...\n");
-// 		  AS7343_get_raw_spectrum(AS7343_readings);
+//
+// 		  // averaging {reps} number of repeated measurements
+// 		  for (int rep = 0; rep < reps; ++rep) {
+// 	 		  AS7343_get_raw_spectrum(AS7343_reads_curr);
+// 	 		  // print iteration
+// 	 		  UART_printf("\r\n   %2d", rep+1);
+// 	 		  for (int i = 0; i < 12; ++i) {
+// 	 			  UART_printf(" | %7d", AS7343_reads_curr[i]); // print
+// 	 			  AS7343_reads_cumm[i] += (uint64_t) (AS7343_reads_curr[i]); // add
+// 	 		  }
+// 		  }
 // //		  AS7343_readings[0] = AS7343_read_2b(AS7343_CH12_DATA_L);
 // //		  AS7343_readings[1] = AS7343_read_2b(AS7343_CH6_DATA_L);
 //
-// 		  HAL_UART_Transmit(&huart2, vals, sizeof(vals)-1, 1000);
+// 		  HAL_UART_Transmit(&huart2, divider, sizeof(divider)-1, 1000);
+// 		  UART_printf("\r\n  avg");
 // 		  for (int i = 0; i < 12; ++i) {
-// 			  UART_printf(" | %5d", AS7343_readings[i]);
+// 			  UART_printf(" | %7d", (int) ((int)AS7343_reads_cumm[i])/reps);
 // 		  }
 // 		  HAL_UART_Transmit(&huart2, labels, sizeof(labels)-1, 1000);
-//
-//
+
+
 // 		  UART_printf("\nNow finding raw spectrum (optimized). Resetting first... ");
 // 		  AS7343_reset();
 // 		  AS7343_default_config();
@@ -373,6 +393,109 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 0;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 65535;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_OnePulse_Init(&htim1, TIM_OPMODE_SINGLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 49;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 10009;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OnePulse_Init(&htim3, TIM_OPMODE_SINGLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_ACTIVE;
+  sConfigOC.Pulse = 5000;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_OC_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+  HAL_TIM_MspPostInit(&htim3);
+
 }
 
 /**
@@ -557,7 +680,7 @@ void clear_C12880MA_readings(uint16_t C12880_readings[288]) {
   }
 }
 
-void clear_AS7343_readings(uint16_t AS7343_readings[12]) {
+void clear_AS7343_readings(uint64_t AS7343_readings[12]) {
   for (int i=0; i < 12; ++i) {
     AS7343_readings[i] = 0;
   }

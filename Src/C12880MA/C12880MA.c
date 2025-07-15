@@ -159,10 +159,23 @@ void Init_C12880MA_GPIO() {
 
 	GPIOA->OSPEEDR |= (0b11 << 16); // set as high speed output
 
-	// C12880MA ST pin (PA2)
-//	GPIOA->MODER |= (10 << 4); // set PA2 as alternate function
-//
-//	GPIOA->AFR[0] |= (0x00000100); // set to TIM2_CH3 function (AF1 = 0b0001)
+	// C12880MA temp pin (PA10)
+	GPIOA->MODER |= (1 << 17); // set PA8 as alternate function
+	GPIOA->MODER &= ~(1 << 16);
+
+	GPIOA->AFR[1] &= ~(0x00000001); // set to MCO1 function (AF0 = 0b0000)
+
+	GPIOA->OSPEEDR |= (0b11 << 16); // set as high speed output
+
+	// C12880MA ST pin (PA0)
+	GPIOA->MODER |= (0b10 << 0); // set PA0 as alternate function
+
+	GPIOA->AFR[0] |= (0x00000001); // set to TIM2_CH1 function (AF1 = 0b0001)
+
+	// C12880MA temp output pin (PA10)
+	GPIOA->MODER |= (0b10 << 20); // set PA10 as alternate function
+
+	GPIOA->AFR[1] |= (0x00000100); // set to TIM1_CH3 function (AF1 = 0b0001)
 
 //	GPIOB->MODER &= ~(1 << 21); // set PB10 as output mode
 //	GPIOB->MODER |= (1 << 20);
@@ -277,21 +290,21 @@ void Init_C12880MA_ADC() {
 
 void Init_TIM() {
 	//////////////////////////////////////////////////////////////////////////////////////////
-	RCC->APB1ENR |= (1 << 0); 	// enable TIM2 (32-bit counter)
-								// this is configured to 100 MHz (APB1 Timer CLK)
+	RCC->APB1ENR |= (1 << 0); // enable TIM2 (32-bit counter)
+							  // this is configured to 100 MHz (APB1 Timer CLK)
 
 	TIM2->PSC |= (49 << 0); // pre-scaler = 49 + 1 so that f_eff = 2 MHz (same as sensor CLK)
 
+	TIM2->CR1 &= ~(0b11 << 8); // clock division: none
 	TIM2->CR1 &= ~(0b11 << 5); // edge-aligned mode (follow DIR bit)
 	TIM2->CR1 &= ~(1 << 4); // DIR: up-counting
 	TIM2->CR1 |=  (1 << 3); // one-pulse mode: disable counter at update event (UEV)
 
-	TIM2->CCR1 	|= ~(10 << 0); 	// this sets t_delay before output is toggled
-	TIM2->ARR 	|=  (9999 + 10); 	// pulse duration default: 5ms (x0.5µs)
-	TIM2->CCMR1 |=  (0b111 << 4); 	// OC1M: set OC1 to HIGH at CCR1 match (posedge of ST), then low at ARR match (negedge of ST)
-	TIM2->EGR	|= (1 << 0);		// UG: ENABLED
-
+	TIM2->CCR1 	 = (10 << 0); 	// this sets t_delay before output is toggled
+	TIM2->ARR 	 = (99 + 10); 	// pulse duration default: 5ms (x0.5µs)
+	TIM2->CCMR1 |= (0b111 << 4); 	// OC1M: PWM 2 (high on CNT > CCR, low otherwise);
 	TIM2->CCMR1 &= ~(0b11 << 0); 	// CC1S: configured as OUTPUT
+	TIM2->EGR	|= (1 << 0);		// UG: ENABLED
 
 	TIM2->CCER  &= ~(1 << 1);		// CC1P: OC1 active high
 	TIM2->CCER 	|=  (1 << 0); 		// CC1E: OC1 is output on corresponding pin (PA0)
@@ -307,18 +320,29 @@ void Init_TIM() {
 	RCC->APB2ENR |= (1 << 0); 	// enable TIM1 (32-bit counter)
 								// this is configured to 100 MHz (APB2 Timer CLK)
 
-	TIM1->SMCR |= (1 << 15); // inverted ETR (react to negedge to compensate for delayed reaction)
-	TIM1->SMCR |= (1 << 14); // enable External Clock Mode 2
-	TIM1->SMCR &= ~(0b11 << 12); // no prescaler on ET signal
-	TIM1->SMCR &= ~(0xF << 8); // no filter; sample ETR every CC
-	
+	TIM1->PSC |= (49 << 0); // pre-scaler = 49 + 1 so that f_eff = 2 MHz (same as sensor CLK)
+
+	TIM1->CR1 &= ~(0b11 << 8); // clock division: none
+	TIM1->CR1 &= ~(0b11 << 5); // edge-aligned mode (follow DIR bit)
+	TIM1->CR1 &= ~(1 << 4); // DIR: up-counting
+	TIM1->CR1 |=  (1 << 3); // one-pulse mode: disable counter at update event (UEV)
+
+	TIM1->CCR3 	 = (87); 	// this sets t_delay before output is toggled
+	TIM1->ARR 	 = (88); 	// pulse duration default: 5ms (x0.5µs)
+	TIM1->CCMR2 |= (0b110 << 4); 	// OC1M: PWM 1 (high on CNT < CCR, low otherwise);
+	TIM1->CCMR2 &= ~(0b11 << 0); 	// CC1S: configured as OUTPUT
+	TIM1->EGR	|= (1 << 0);		// UG: ENABLED
+
+	TIM1->CCER  |=  (1 << 9);		// CC1P: OC1 active low
+	TIM1->CCER 	|=  (1 << 8); 		// CC1E: OC1 is output on corresponding pin (PA0)
+
+	TIM1->BDTR |= (1 << 15); // Main Output Enable: enable
+
+	TIM1->SMCR |= (1 << 15); // non-inverted ETR
 	TIM1->SMCR |= (0b001 << 4); // ITR1 (TIM2_TRGO) as trigger source
 	TIM1->SMCR |= (0b110 << 0); // Slave Mode: Trigger Mode - start timer at posedge of TRGI
 
-	TIM1->DIER |= (1 << 0); // Update Interrupt Enable
-
-
-	TIM1->ARR = (85 << 0); // count to 85, then generate interrupt
+	TIM1->DIER |= (1 << 0); // generate interrupt on UEV
 
 	TIM1->CNT &= ~(0xFFFFFFFF); // set count to 0 (TIM1 is 32-bit)
 	TIM1->CR1 &= ~(1 << 0); // disable TIM1 for now
@@ -338,11 +362,12 @@ void C12880MA_set_tint(uint32_t tint) {
 }
 
 void C12880MA_ST(uint32_t st_pulse_width) {
-	TIM2->PSC |= (49 << 0); // pre-scaler = 49 + 1; f_eff = 2 MHz (same as sensor CLK)
+	TIM2->CR1 &= ~(1 << 0); // disable timer
+	TIM2->PSC |=  (49 << 0); // pre-scaler = 49 + 1; f_eff = 2 MHz (same as sensor CLK)
 	TIM2->CNT &= ~(0xFFFFFFFF); // set count to 0 (TIM2 is 32-bit)
-	TIM2->ARR |=  (st_pulse_width - 1 + 10); 	// pulse duration default: 5ms (x0.5µs)
+	TIM2->ARR  =  (st_pulse_width - 1 + 10); 	// pulse duration default: 5ms (x0.5µs)
 
-	TIM2->CR1 |= (1 << 0); // enable timer
+	TIM2->CR1 |=  (1 << 0); // enable timer
 }
 
 void C12880MA_start(uint16_t channel_readings[288], uint32_t on_time, uint32_t sensor_clk_cycles) {

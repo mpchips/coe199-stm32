@@ -130,33 +130,33 @@ void set_LED_off() {
 }
 
 void AS7343_default_config() {
-	UART_printf("\r\nLoading Default configuration.");
+//	UART_printf("\r\nLoading Default configuration.");
 
-	UART_printf("\r\n1. Disabling AS7343...");
+//	UART_printf("\r\n1. Disabling AS7343...");
 	AS7343_disable(); // disable and turn off
-	UART_printf("DONE");
+//	UART_printf("DONE");
 	/* Integration time and ADC sensitivity */
-	UART_printf("\r\n2. Setting ATIME to 0...");
+//	UART_printf("\r\n2. Setting ATIME to 0...");
 	AS7343_set_ATIME(0);
-	UART_printf("DONE");
+//	UART_printf("DONE");
 
-	UART_printf("\r\n2. Setting ASTEP to 999...");
+//	UART_printf("\r\n2. Setting ASTEP to 999...");
 	AS7343_set_ASTEP(999);
-	UART_printf("DONE");
+//	UART_printf("DONE");
 
-	UART_printf("\r\n3. Setting AGAIN to 256X...");
+//	UART_printf("\r\n3. Setting AGAIN to 256X...");
 	AS7343_set_AGAIN(AS7343_GAIN_256X);
-	UART_printf("DONE");
+//	UART_printf("DONE");
 
 	/* Auto SMUX mode */
-	UART_printf("\r\n4. Setting SMUX to 18-channel mode...");
+//	UART_printf("\r\n4. Setting SMUX to 18-channel mode...");
 	AS7343_auto_smux(mode2_18ch);
-	UART_printf("DONE");
+//	UART_printf("DONE");
 
 	/* Enable Wait between measurements */
-	UART_printf("\r\n5. Enabling wait between measurements...");
+//	UART_printf("\r\n5. Enabling wait between measurements...");
 	AS7343_wait_enable();
-	UART_printf("DONE\r\n");
+//	UART_printf("DONE\r\n");
 }
 
 void AS7343_enable() {
