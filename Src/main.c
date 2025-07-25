@@ -222,7 +222,7 @@ int main(void)
 		  ///////////////////////////////////////////////////////////////////////////////////
 		  BUTTON_PRESS = NOT_PRESSED;
 		  UART_printf("Button pressed. Initiating measurement with C12880MA...\r\n");
-		  C12880MA_ST(300);
+		  C12880MA_ST(30);
 
 
 		  ///////////////////////////////////////////////////////////////////////////////////
@@ -609,16 +609,9 @@ void TIM3_Init(void) {
 	TIM3->CR1 &= ~(1 << 0); // disable TIM2 for now
 }
 
-void TIM1_UP_IRQHandler(void) {
-	// called whenever TIM1 reacher ARR value. Initially 85 (wait time before output capture)
-	TIM1->ARR = 288; // change to 288
-	TIM1->SR &= ~(1 << 0); // clear interrupt flag
-}
-
-void TIM2_UP_IRQHandler(void) {
-	// called whenever TIM2 reaches ARR value (ST pulse finishes)
-	start_sig_done = 1;
-	TIM2->SR &= ~(1 << 0); // clear interrupt flag
+void TIM1_IRQHandler(void) {
+  GPIOB->ODR |= (1 << 5); // set output as HIGH
+  ADC1->CR2 |= (1 << 0);
 }
 
 void EXTI4_IRQHandler(void) {
@@ -648,7 +641,6 @@ void EXTI3_IRQHandler(void) {
 	EXTI->PR |= (1 << 3); // clear flag
   
 	// disable timer, other peripherals
-	ADC1->CR2 &= ~(0b11 << 28); // disable rising edge trigger detection for ADC
 	ADC1->CR2 &= ~(1 << 0); // disable ADC
 	NVIC_DisableIRQ(EXTI4_IRQn); // disable interrupt for ADC
 	NVIC_DisableIRQ(EXTI3_IRQn); // disable EOS detection

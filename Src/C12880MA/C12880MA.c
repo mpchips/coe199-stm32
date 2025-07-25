@@ -6,14 +6,13 @@
  *
  *
  * PIN LAYOUT
- *    PC7  : LED control (unused)
- *    PA9  : video output
+ *    PA0  : START (TIM2_CH4)
  *    PA8  : CLK out (hardwired by STM32)
- *    PA3  : START (TIM2_CH4)
- *    PB4  : TRIGGER (connected to EXTI4, for incrementing of sensor_clk_cycles)
+ *    PA11 : TRG (must be shorted with PB4; connected to EXTI11, for ADC trigger)
+ *    PB4  : TRG (connected to EXTI4, for incrementing of sensor_clk_cycles)
  *    PB3  : end-of-scan (EOS)
  * 	  PA6  : video output (must be shorted with PA9; ADC1_ch6)
- *    PA11 : TRIGGER (must be shorted with PB4; connected to EXTI11, for ADC trigger)
+ *    PC7  : LED control (unused)
  * 
  * NOTES ON REDUNDANCY OF PINS
  * >> Pins of video output and TRIGGER are redundant. The first
@@ -145,9 +144,6 @@ void Init_C12880MA_GPIO() {
 
 	GPIOC->ODR &= ~(1 << 7); // set as initially LOW
 
-	// C12880MA video pin (PA9) <- SEE Init_ADC()
-	GPIOA->MODER |= (0b11 << 18); // set PA9 as analog mode
-
 	// C12880MA video pin (PA6) << source of analog for ADC
 	GPIOA->MODER |= (0b11 << 12); // set PA6 as analog mode
 
@@ -172,23 +168,18 @@ void Init_C12880MA_GPIO() {
 
 	GPIOA->AFR[0] |= (0x00000001); // set to TIM2_CH1 function (AF1 = 0b0001)
 
-	// C12880MA temp output pin (PA10)
+	// C12880MA temp output pin (of TIM1) PA10)
 	GPIOA->MODER |= (0b10 << 20); // set PA10 as alternate function
 
 	GPIOA->AFR[1] |= (0x00000100); // set to TIM1_CH3 function (AF1 = 0b0001)
 
-//	GPIOB->MODER &= ~(1 << 21); // set PB10 as output mode
-//	GPIOB->MODER |= (1 << 20);
-//
-//	GPIOB->OTYPER &= ~(1 << 10); // push-pull type
-//
-//	GPIOB->OSPEEDR |= (1 << 21); // high speed output
-//	GPIOB->OSPEEDR |= (1 << 20);
-//
-//	GPIOB->PUPDR &= ~(1 << 21); // no pull-up, pull-down
-//	GPIOB->PUPDR &= ~(1 << 20);
-//
-//	GPIOB->ODR &= ~(1 << 10); // set as initially LOW
+	// PB5: temporary output to check if timer interrupt is being called
+	GPIOB->MODER |= (0b01 << 10);	// set PB5 as output mode
+	GPIOB->OTYPER &= ~(1 << 5);		// push-pull type
+	GPIOB->OSPEEDR |= (0b10 << 10); // fast speed output
+	GPIOB->PUPDR &= ~(0b11 << 10);	// no pull-up, pull-down
+
+	GPIOB->ODR &= ~(1 << 5); // set as initially LOW
 
 	// C12880MA TRG pin (PB4)
 	GPIOB->MODER &= ~(1 << 9); // set PB4 as input mode
@@ -320,21 +311,22 @@ void Init_TIM() {
 	RCC->APB2ENR |= (1 << 0); 	// enable TIM1 (32-bit counter)
 								// this is configured to 100 MHz (APB2 Timer CLK)
 
-	TIM1->PSC |= (49 << 0); // pre-scaler = 49 + 1 so that f_eff = 2 MHz (same as sensor CLK)
+	TIM1->PSC |= (9 << 0); // pre-scaler = 9 + 1 so that f_eff = 10 MHz (faster than sensor CLK)
+							// 0.1µs per clock cycle
 
 	TIM1->CR1 &= ~(0b11 << 8); // clock division: none
 	TIM1->CR1 &= ~(0b11 << 5); // edge-aligned mode (follow DIR bit)
 	TIM1->CR1 &= ~(1 << 4); // DIR: up-counting
 	TIM1->CR1 |=  (1 << 3); // one-pulse mode: disable counter at update event (UEV)
 
-	TIM1->CCR3 	 = (87); 	// this sets t_delay before output is toggled
-	TIM1->ARR 	 = (88); 	// pulse duration default: 5ms (x0.5µs)
-	TIM1->CCMR2 |= (0b110 << 4); 	// OC1M: PWM 1 (high on CNT < CCR, low otherwise);
-	TIM1->CCMR2 &= ~(0b11 << 0); 	// CC1S: configured as OUTPUT
+	TIM1->CCR3 	 = (444); 	// this sets t_delay before output is toggled
+	TIM1->ARR 	 = (445); 	// pulse duration default: 5ms (x0.5µs)
+	TIM1->CCMR2 |= (0b110 << 4); 	// OC3M: PWM 1 (high on CNT < CCR, low otherwise);
+	TIM1->CCMR2 &= ~(0b11 << 0); 	// CC3S: configured as OUTPUT
 	TIM1->EGR	|= (1 << 0);		// UG: ENABLED
 
-	TIM1->CCER  |=  (1 << 9);		// CC1P: OC1 active low
-	TIM1->CCER 	|=  (1 << 8); 		// CC1E: OC1 is output on corresponding pin (PA0)
+	TIM1->CCER  |=  (1 << 9);		// CC3P: OC3 active low
+	TIM1->CCER 	|=  (1 << 8); 		// CC3E: OC3 is output on corresponding pin (PA0)
 
 	TIM1->BDTR |= (1 << 15); // Main Output Enable: enable
 
@@ -342,10 +334,12 @@ void Init_TIM() {
 	TIM1->SMCR |= (0b001 << 4); // ITR1 (TIM2_TRGO) as trigger source
 	TIM1->SMCR |= (0b110 << 0); // Slave Mode: Trigger Mode - start timer at posedge of TRGI
 
-	TIM1->DIER |= (1 << 0); // generate interrupt on UEV
+	TIM1->DIER |= (1 << 3); // generate interrupt on compare
 
 	TIM1->CNT &= ~(0xFFFFFFFF); // set count to 0 (TIM1 is 32-bit)
 	TIM1->CR1 &= ~(1 << 0); // disable TIM1 for now
+
+	NVIC_SetPriority(TIM1_CC_IRQn, 5);  // Set Priority
 }
 
 void C12880MA_set_tint(uint32_t tint) {
@@ -366,6 +360,12 @@ void C12880MA_ST(uint32_t st_pulse_width) {
 	TIM2->PSC |=  (49 << 0); // pre-scaler = 49 + 1; f_eff = 2 MHz (same as sensor CLK)
 	TIM2->CNT &= ~(0xFFFFFFFF); // set count to 0 (TIM2 is 32-bit)
 	TIM2->ARR  =  (st_pulse_width - 1 + 10); 	// pulse duration default: 5ms (x0.5µs)
+
+	TIM1->CR1 &= ~(1 << 0); // disable timer
+	TIM1->PSC |= (9 << 0); // pre-scaler = 9 + 1 so that f_eff = 10 MHz
+	TIM1->CNT &= ~(0xFFFFFFFF); // set count to 0 (TIM2 is 32-bit)
+
+	NVIC_EnableIRQ(TIM1_CC_IRQn); // enable tim1 interrupt
 
 	TIM2->CR1 |=  (1 << 0); // enable timer
 }
