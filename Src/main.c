@@ -50,7 +50,6 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart2;
@@ -63,7 +62,6 @@ UART_HandleTypeDef huart2;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
-static void MX_TIM1_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 void TIM3_Init(void);
@@ -74,10 +72,10 @@ void UART_printf(char *format, ...);
 /* USER CODE BEGIN 0 */
 int pressed = 0;
 uint32_t sensor_clk_cycles;
-int start_conv_flag = 0; // for C12880MA routine
-int start_sig_done = 0;
+//int start_conv_flag = 0; // for C12880MA routine
+//int start_sig_done = 0;
 uint16_t ADC_readings[200] = {0};
-int adc_char_done;
+int eos;
 
 char *txb_ptr = 0; // for transmitting to ESP32 via I2C
 //int C12880MA_done = 0; // indicates entire measurement routine is done
@@ -142,7 +140,6 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
-  MX_TIM1_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 
@@ -222,9 +219,16 @@ int main(void)
 		  ///////////////////////////////////////////////////////////////////////////////////
 		  BUTTON_PRESS = NOT_PRESSED;
 		  UART_printf("Button pressed. Initiating measurement with C12880MA...\r\n");
+		  eos = 0;
 		  C12880MA_ST(30);
 
-
+		  while (eos != 1) {}
+		  eos = 0;
+		  // disable and deinit peripherals
+		  // TIM2, TIM1 already disabled (one-pulse)
+		  NVIC_DisableIRQ(TIM1_CC_IRQn);
+		  NVIC_DisableIRQ(EXTI4_IRQn);
+		  NVIC_DisableIRQ(EXTI3_IRQn);
 		  ///////////////////////////////////////////////////////////////////////////////////
 		  /////////////////////////////// C12880MA ROUTINE //////////////////////////////////
 		  ///////////////////////////////////////////////////////////////////////////////////
@@ -393,46 +397,6 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-}
-
-/**
-  * @brief TIM1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM1_Init(void)
-{
-
-  /* USER CODE BEGIN TIM1_Init 0 */
-
-  /* USER CODE END TIM1_Init 0 */
-
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM1_Init 1 */
-
-  /* USER CODE END TIM1_Init 1 */
-  htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 0;
-  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 65535;
-  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 0;
-  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_OnePulse_Init(&htim1, TIM_OPMODE_SINGLE) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM1_Init 2 */
-
-  /* USER CODE END TIM1_Init 2 */
-
 }
 
 /**
@@ -609,18 +573,18 @@ void TIM3_Init(void) {
 	TIM3->CR1 &= ~(1 << 0); // disable TIM2 for now
 }
 
-void TIM1_IRQHandler(void) {
+void TIM1_CC_IRQHandler(void) {
   GPIOB->ODR |= (1 << 5); // set output as HIGH
   ADC1->CR2 |= (1 << 0);
+  NVIC_EnableIRQ(EXTI4_IRQn); // enable saving of values
 }
 
 void EXTI4_IRQHandler(void) {
-	++sensor_clk_cycles;
+	EXTI->PR |= (1 << 4); // clear flag
 	if (sensor_clk_cycles <= 6000) {
 		ADC_readings[sensor_clk_cycles] = ADC1->DR;
-	} else {
-		adc_char_done = 1;
 	}
+	++sensor_clk_cycles;
 //	if (start_sig_done && (sensor_clk_cycles == 10)) {
 //		start_conv_flag = 1; // we can now start storing the result of AD conversion
 //	}
@@ -634,16 +598,11 @@ void EXTI4_IRQHandler(void) {
 //	  	ADC1->CR2 &= ~(0b11 << 28); // disable rising edge trigger detection
 //	  	ADC1->CR2 &= ~(1 << 0);
 //	}
-	EXTI->PR |= (1 << 4); // clear flag
 }
 
 void EXTI3_IRQHandler(void) {
 	EXTI->PR |= (1 << 3); // clear flag
-  
-	// disable timer, other peripherals
-	ADC1->CR2 &= ~(1 << 0); // disable ADC
-	NVIC_DisableIRQ(EXTI4_IRQn); // disable interrupt for ADC
-	NVIC_DisableIRQ(EXTI3_IRQn); // disable EOS detection
+	eos = 1;
 }
 
 void UART_printf(char *format, ...) {

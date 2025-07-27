@@ -36,7 +36,7 @@
 #include <C12880MA.h>
 #include <main.h>
 
-#define ST_DELAY 3 // cc
+#define ST_DELAY 3 // 3 cc delay between calling C12880MA_ST() and ST signal posedge
 
 void Init_C12880MA() {
 
@@ -144,9 +144,6 @@ void Init_C12880MA_GPIO() {
 
 	GPIOC->ODR &= ~(1 << 7); // set as initially LOW
 
-	// C12880MA video pin (PA6) << source of analog for ADC
-	GPIOA->MODER |= (0b11 << 12); // set PA6 as analog mode
-
 	// C12880MA CLK pin (PA8)
 	GPIOA->MODER |= (1 << 17); // set PA8 as alternate function
 	GPIOA->MODER &= ~(1 << 16);
@@ -173,7 +170,7 @@ void Init_C12880MA_GPIO() {
 
 	GPIOA->AFR[1] |= (0x00000100); // set to TIM1_CH3 function (AF1 = 0b0001)
 
-	// PB5: temporary output to check if timer interrupt is being called
+	// PB5: temporary output to check if timer interrupt handler is being called
 	GPIOB->MODER |= (0b01 << 10);	// set PB5 as output mode
 	GPIOB->OTYPER &= ~(1 << 5);		// push-pull type
 	GPIOB->OSPEEDR |= (0b10 << 10); // fast speed output
@@ -181,13 +178,17 @@ void Init_C12880MA_GPIO() {
 
 	GPIOB->ODR &= ~(1 << 5); // set as initially LOW
 
-	// C12880MA TRG pin (PB4)
-	GPIOB->MODER &= ~(1 << 9); // set PB4 as input mode
-	GPIOB->MODER &= ~(1 << 8);
+	// C12880MA video pin (PA6) << source of analog input for ADC
+	GPIOA->MODER |= (0b11 << 12); // set PA6 as analog mode
 
-	// C12880MA EOS pin (PB5)
-	GPIOB->MODER &= ~(1 << 11); // set PB5 as input mode
-	GPIOB->MODER &= ~(1 << 10);
+	// C12880MA TRG pin (PA11)
+	GPIOA->MODER &= ~(0b11 << 22); // set PA11 as input mode
+
+	// C12880MA TRG pin (PB4)
+	GPIOB->MODER &= ~(0b11 << 8); // set PB4 as input mode
+
+	// C12880MA EOS pin (PB3)
+	GPIOB->MODER &= ~(0b11 << 6); // set PB3 as input mode
 
 } // Init_C12880MA_GPIO()
 
@@ -196,8 +197,8 @@ void Init_C12880MA_EXTI() {
 
 	//-------------------------------------------------------------------
 	// NOTE: we are configuring interrupt for PB4 pin.
-	// 		 This is for counting the sensor CLK cycles, which
-	//		 will be the basis of the timing of other signals.
+	// 		 This is for counting the sensor CLK cycles, and
+	//		 and saving ADC values
 	// 		 EXTI handler is responsible for incrementing count.
 	//-------------------------------------------------------------------
 
@@ -224,7 +225,7 @@ void Init_C12880MA_EXTI() {
 	// 		 This is to allow interrupt-based end of program.
 	//-------------------------------------------------------------------
 
-	SYSCFG->EXTICR[0] |= (0x1 << 12); // enable EXTI for PB3 (TRG pin)
+	SYSCFG->EXTICR[0] |= (0x1 << 12); // enable EXTI for PB3 (EOS pin)
 	EXTI->IMR |= (1 << 3); // disable mask on EXTI4
 
 	EXTI->RTSR |=  (1 << 3); //  enable  rising edge trigger
@@ -356,6 +357,8 @@ void C12880MA_set_tint(uint32_t tint) {
 }
 
 void C12880MA_ST(uint32_t st_pulse_width) {
+	Init_TIM();
+
 	TIM2->CR1 &= ~(1 << 0); // disable timer
 	TIM2->PSC |=  (49 << 0); // pre-scaler = 49 + 1; f_eff = 2 MHz (same as sensor CLK)
 	TIM2->CNT &= ~(0xFFFFFFFF); // set count to 0 (TIM2 is 32-bit)
@@ -366,6 +369,7 @@ void C12880MA_ST(uint32_t st_pulse_width) {
 	TIM1->CNT &= ~(0xFFFFFFFF); // set count to 0 (TIM2 is 32-bit)
 
 	NVIC_EnableIRQ(TIM1_CC_IRQn); // enable tim1 interrupt
+	NVIC_EnableIRQ(EXTI3_IRQn); // enable EOS interrupt now
 
 	TIM2->CR1 |=  (1 << 0); // enable timer
 }
