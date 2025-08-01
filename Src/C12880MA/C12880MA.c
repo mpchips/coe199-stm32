@@ -36,6 +36,17 @@
 #include <C12880MA.h>
 #include <main.h>
 
+// coefficients to convert pixel number to wavelength
+// obtained from sensor's final inspection sheet (provided with sensor)
+// wavelength(px) = A0 + B1*px + B2*px^2 + B3*px^3 + B4*px^4 + B5*px^5
+#define A0  3.195480337e+02
+#define B1  2.690839446e+00
+#define B2 -1.092565127e-03
+#define B3 -7.882067953e-06
+#define B4  8.663338298e-09
+#define B5  7.654515822e-12
+
+
 #define ST_DELAY 3 // 3 cc delay between calling C12880MA_ST() and ST signal posedge
 
 void Init_C12880MA() {
@@ -320,7 +331,7 @@ void Init_TIM() {
 	TIM1->CR1 &= ~(1 << 4); // DIR: up-counting
 	TIM1->CR1 |=  (1 << 3); // one-pulse mode: disable counter at update event (UEV)
 
-	TIM1->CCR3 	 = (444); 	// this sets t_delay before output is toggled
+	TIM1->CCR3 	 = (443); 	// this sets t_delay before output is toggled
 	TIM1->ARR 	 = (445); 	// pulse duration default: 5ms (x0.5µs)
 	TIM1->CCMR2 |= (0b110 << 4); 	// OC3M: PWM 1 (high on CNT < CCR, low otherwise);
 	TIM1->CCMR2 &= ~(0b11 << 0); 	// CC3S: configured as OUTPUT

@@ -219,16 +219,21 @@ int main(void)
 		  ///////////////////////////////////////////////////////////////////////////////////
 		  BUTTON_PRESS = NOT_PRESSED;
 		  UART_printf("Button pressed. Initiating measurement with C12880MA...\r\n");
+		  sensor_clk_cycles=0;
 		  eos = 0;
-		  C12880MA_ST(30);
+		  C12880MA_ST(1000);
 
 		  while (eos != 1) {}
-		  eos = 0;
 		  // disable and deinit peripherals
 		  // TIM2, TIM1 already disabled (one-pulse)
 		  NVIC_DisableIRQ(TIM1_CC_IRQn);
 		  NVIC_DisableIRQ(EXTI4_IRQn);
 		  NVIC_DisableIRQ(EXTI3_IRQn);
+		  eos = 0;
+		  UART_printf("Program finished.\r\n");
+		  for (int i=0; i<288; ++i) {
+			UART_printf("%5d,", C12880_readings[i]);
+		  }
 		  ///////////////////////////////////////////////////////////////////////////////////
 		  /////////////////////////////// C12880MA ROUTINE //////////////////////////////////
 		  ///////////////////////////////////////////////////////////////////////////////////
@@ -574,7 +579,8 @@ void TIM3_Init(void) {
 }
 
 void TIM1_CC_IRQHandler(void) {
-  GPIOB->ODR |= (1 << 5); // set output as HIGH
+  TIM1->DIER &= ~(1 << 3); // disable interrupt on compare
+//  GPIOB->ODR |= (1 << 5); // set output as HIGH
   ADC1->CR2 |= (1 << 0);
   NVIC_EnableIRQ(EXTI4_IRQn); // enable saving of values
 }
@@ -602,6 +608,7 @@ void EXTI4_IRQHandler(void) {
 
 void EXTI3_IRQHandler(void) {
 	EXTI->PR |= (1 << 3); // clear flag
+//	GPIOB->ODR &= ~(1 << 5); // toggle output low
 	eos = 1;
 }
 
