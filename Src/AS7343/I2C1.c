@@ -7,8 +7,8 @@
  * Uses STM32F411 I2C1 peripheral
  *
  * PIN LAYOUT
- *    PB8  : SDA
- *    PB9  : SCL
+ *    PB7  : SDA
+ *    PB6  : SCL
  */
 
 #include <I2C1.h>
@@ -23,17 +23,18 @@ void Init_I2C1() {
 	RCC->APB1ENR |= (1<<21);  // enable I2C CLOCK
 
 	// 2. configure I2C pins
-	GPIOB->MODER |= (2<<16); // PB8
-	GPIOB->MODER |= (2<<18); // PB9
+	GPIOB->MODER |= (2<<14); // PB7
+	GPIOB->MODER |= (2<<12); // PB6
 
-	GPIOB->OTYPER |= (1<<8); // open-drain
-	GPIOB->OTYPER |= (1<<9); // open-drain
+	GPIOB->OTYPER |= (1<<7); // open-drain
+	GPIOB->OTYPER |= (1<<6); // open-drain
 
-	GPIOB->OSPEEDR |= (3<<16) | (3<<18); // high-speed output
+	GPIOB->OSPEEDR |= (3<<14) | (3<<12); // high-speed output
 
-	GPIOB->PUPDR |= (1<<16) | (1<<18); // pull-up
+	GPIOB->PUPDR |= (1<<14) | (1<<12); // pull-up
 
-	GPIOB->AFR[1] |= (4<<0) | (4<<4); // alternate function 4
+	GPIOB->AFR[0] |= (4<<24); // alternate function 4
+	GPIOB->AFR[0] |= (4<<28); // alternate function 4
 
 	// 3. reset I2C
 	I2C1->CR1 &= ~(1 << 0);	// peripheral disable (reset)
@@ -69,6 +70,20 @@ void I2C1_start() {
 void I2C1_stop() {
 	I2C1->CR1 |= (1 << 9); // generate STOP
 						   // this is automatically cleared after
+}
+
+void I2C1_send_buf(uint8_t SLAVE_WRITE_ADDR, uint8_t *buf, uint32_t len) {
+	uint8_t *current_char = buf;
+
+	I2C1_start();
+
+	I2C1_transmit_addr(SLAVE_WRITE_ADDR);
+
+	for (uint32_t remaining = len; remaining > 0; --remaining, ++current_char) {
+		I2C1_transmit(*current_char);
+	}
+
+	I2C1_stop();
 }
 
 void I2C1_transmit(uint8_t data) {

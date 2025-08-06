@@ -7,8 +7,8 @@
  * Uses STM32F411 I2C2 peripheral in standard mode.
  *
  * PIN LAYOUT
- *    PB10  : SDA
- *    PB11  : SCL
+ *    PB9   : SDA
+ *    PB10  : SCL
  */
 
 #include <I2C2.h>
@@ -19,8 +19,8 @@
 
 
 /* DEFINE THE FF VALUES BELOW FOR INITIALIZATION */
-#define I2C2_SDA_PIN 10 // will automatically use GPIOB
-#define I2C2_SCL_PIN 11 // will automatically use GPIOB
+#define I2C2_SDA_PIN 9 // will automatically use GPIOB
+#define I2C2_SCL_PIN 10 // will automatically use GPIOB
 
 #define APB1_CLK_FREQ_MHZ 40 // configured clock frequency of APB1 (default = 16)
 #define I2C2_SCL_FREQ_KHZ 2500 // target I2C2_SCL frequency
@@ -52,27 +52,18 @@ void Init_I2C2() {
 	RCC->APB1ENR |= (1 << 22);  // enable I2C2 CLOCK
 
 	// 2. configure I2C2 pins
-	GPIOB->MODER |= (2 << (I2C2_SDA_PIN*2)); // PB8
-	GPIOB->MODER |= (2 << (I2C2_SCL_PIN*2)); // PB9
+	GPIOB->MODER |= (2 << 20); // PB10
+	GPIOB->MODER |= (2 << 18); // PB9
 
-	GPIOB->OTYPER |= (1 << I2C2_SDA_PIN); // open-drain
-	GPIOB->OTYPER |= (1 << I2C2_SCL_PIN); // open-drain
+	GPIOB->OTYPER |= (1 << 10); // open-drain
+	GPIOB->OTYPER |= (1 << 9); // open-drain
 
-	GPIOB->OSPEEDR |= (3 << (I2C2_SDA_PIN*2)) | (3 << (I2C2_SCL_PIN*2)); // high-speed output
+	GPIOB->OSPEEDR |= (3 << 20) | (3 << 18); // high-speed output
 
-	GPIOB->PUPDR |= (1 << (I2C2_SDA_PIN*2)) | (1 << (I2C2_SCL_PIN*2)); // pull-up
+	GPIOB->PUPDR |= (1 << 20) | (1 << 18); // pull-up
 
-	if (I2C2_SDA_PIN >= 8) {
-		GPIOB->AFR[1] |= 4 << ((I2C2_SDA_PIN-8)*4); // alternate function 4
-	} else {
-		GPIOB->AFR[0] |= 4 << (I2C2_SDA_PIN*4); // alternate function 4
-	}
-
-	if (I2C2_SCL_PIN >= 8) {
-		GPIOB->AFR[1] |= 4 << ((I2C2_SCL_PIN-8)*4); // alternate function 4
-	} else {
-		GPIOB->AFR[0] |= 4 << (I2C2_SCL_PIN*4); // alternate function 4
-	}
+	GPIOB->AFR[1] |= (9<<8); // alternate function 9
+	GPIOB->AFR[1] |= (4<<12); // alternate function 4
 
 	// 3. reset I2C2
 	I2C2->CR1 &= ~(1 << 0);	// peripheral disable (reset)
@@ -95,6 +86,19 @@ void Init_I2C2() {
 	I2C2->CR1 |= (1 << 0); // peripheral enable
 
 }
+
+void I2C2_transmit_buf(uint8_t SLAVE_ADDR_WRITE, char *buf) {
+	I2C2_start();
+
+	I2C2_transmit_addr(SLAVE_ADDR_WRITE); // chip-addresswrite
+
+	while (!(I2C1->SR1 & (1 << 7))); // TxE: wait for Tx to Empty
+
+	I2C2_transmit(buf);
+
+	I2C2_stop();
+}
+
 
 void I2C2_start() {
 

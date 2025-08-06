@@ -27,6 +27,15 @@ void I2C1_start();
 void I2C1_stop();
 
 /**
+ * @brief Sends a series of consecutive 8-bit data to a slave.
+ * 
+ * @param SLAVE_WRITE_ADDR (uint8_t) write address of slave
+ * @param buf (char *) pointer to start of buffer
+ * @param len (uint32_t) length of buffer
+ * */
+void I2C1_send_buf(uint8_t SLAVE_WRITE_ADDR, uint8_t *buf, uint32_t len);
+
+/**
  * @brief transmits one byte of data
  * */
 void I2C1_transmit(uint8_t data);

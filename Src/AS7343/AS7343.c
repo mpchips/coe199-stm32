@@ -1,19 +1,15 @@
 /*
- * C12880MA.c
+ * AS7343.c
  *
  *  Created on: Feb 6, 2025
  *      Author: moreypiatos
  *
- * Designed to interface using GroupGets LLC.
- * C12880MA Breakout Board
+ * For the ams OSRAM AS7343 Spectrometer Sensor
  *
  * PIN LAYOUT
- *    PC7  : LED control (unused)
- *    PA9  : video output
- *    PA8  : CLK out
- *    PB10 : START
- *    PB4  : TRIGGER
- *    PB5  : end-of-scan (EOS)
+ * 	  PB5: LED 3.3V
+ *    PB8: I2C1_SCL
+ *    PB9: I2C1_SDA
  */
 
 #include <stdio.h>
@@ -80,13 +76,20 @@ AS7343_gain_t AGAIN_lookup[13] = {
 void Init_AS7343() {
 //	Init_AS7343_GPIO();
 	Init_I2C1();
-//	Init_AS7343_I2C(); // not needed for F411 implementation
 }
 
 void Init_AS7343_GPIO() {
 	if (!(RCC->AHB1ENR & (1 << 1))) { // enable GPIOB
 		RCC->AHB1ENR |= (1 << 1);
 	}
+
+	// GENERAL LED out pin (PB5)
+	GPIOB->MODER &= ~(1 << 11); // set PB5 as output mode
+	GPIOB->MODER |=  (1 << 10);
+
+	GPIOB->OSPEEDR |=  (0b11 << 10); // high speed output
+
+	GPIOB->ODR &= ~(1 << 5); // set low for now
 
 	// AS7343L SCL pin (PB8)
 	GPIOB->MODER |= (1 << 17); // set PB8 as alternate function
@@ -118,34 +121,42 @@ void Init_AS7343_GPIO() {
 
 }
 
+void set_LED_on() {
+	GPIOB->ODR |=  (1 << 5); // set high
+}
+
+void set_LED_off() {
+	GPIOB->ODR &= ~(1 << 5); // set low
+}
+
 void AS7343_default_config() {
-	UART_printf("\r\nLoading Default configuration.");
+//	UART_printf("\r\nLoading Default configuration.");
 
-	UART_printf("\r\n1. Disabling AS7343...");
+//	UART_printf("\r\n1. Disabling AS7343...");
 	AS7343_disable(); // disable and turn off
-	UART_printf("DONE");
+//	UART_printf("DONE");
 	/* Integration time and ADC sensitivity */
-	UART_printf("\r\n2. Setting ATIME to 0...");
+//	UART_printf("\r\n2. Setting ATIME to 0...");
 	AS7343_set_ATIME(0);
-	UART_printf("DONE");
+//	UART_printf("DONE");
 
-	UART_printf("\r\n2. Setting ASTEP to 999...");
+//	UART_printf("\r\n2. Setting ASTEP to 999...");
 	AS7343_set_ASTEP(999);
-	UART_printf("DONE");
+//	UART_printf("DONE");
 
-	UART_printf("\r\n3. Setting AGAIN to 256X...");
+//	UART_printf("\r\n3. Setting AGAIN to 256X...");
 	AS7343_set_AGAIN(AS7343_GAIN_256X);
-	UART_printf("DONE");
+//	UART_printf("DONE");
 
 	/* Auto SMUX mode */
-	UART_printf("\r\n4. Setting SMUX to 18-channel mode...");
+//	UART_printf("\r\n4. Setting SMUX to 18-channel mode...");
 	AS7343_auto_smux(mode2_18ch);
-	UART_printf("DONE");
+//	UART_printf("DONE");
 
 	/* Enable Wait between measurements */
-	UART_printf("\r\n5. Enabling wait between measurements...");
+//	UART_printf("\r\n5. Enabling wait between measurements...");
 	AS7343_wait_enable();
-	UART_printf("DONE\r\n");
+//	UART_printf("DONE\r\n");
 }
 
 void AS7343_enable() {
