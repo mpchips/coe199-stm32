@@ -11,7 +11,7 @@
  *    PA11 : TRG (must be shorted with PB4; connected to EXTI11, for ADC trigger)
  *    PB4  : TRG (connected to EXTI4, for incrementing of sensor_clk_cycles)
  *    PB3  : end-of-scan (EOS)
- * 	  PA6  : video output (must be shorted with PA9; ADC1_ch6)
+ * 	  PA6  : video output (ADC1_ch6)
  *    PC7  : LED control (unused)
  * 
  * NOTES ON REDUNDANCY OF PINS
@@ -64,7 +64,7 @@ void Init_C12880MA() {
 	  Init_C12880MA_ADC();
 	  UART_printf("DONE");
 	  UART_printf("\r\n\tTIM...");
-	  Init_TIM();
+	  Init_C12880MA_TIM();
 	  UART_printf("DONE\r\n");
 }
 
@@ -163,14 +163,6 @@ void Init_C12880MA_GPIO() {
 
 	GPIOA->OSPEEDR |= (0b11 << 16); // set as high speed output
 
-	// C12880MA temp pin (PA10)
-	GPIOA->MODER |= (1 << 17); // set PA8 as alternate function
-	GPIOA->MODER &= ~(1 << 16);
-
-	GPIOA->AFR[1] &= ~(0x00000001); // set to MCO1 function (AF0 = 0b0000)
-
-	GPIOA->OSPEEDR |= (0b11 << 16); // set as high speed output
-
 	// C12880MA ST pin (PA0)
 	GPIOA->MODER |= (0b10 << 0); // set PA0 as alternate function
 
@@ -192,10 +184,10 @@ void Init_C12880MA_GPIO() {
 	// C12880MA video pin (PA6) << source of analog input for ADC
 	GPIOA->MODER |= (0b11 << 12); // set PA6 as analog mode
 
-	// C12880MA TRG pin (PA11)
+	// C12880MA TRG pin (PA11), for ADC triggering
 	GPIOA->MODER &= ~(0b11 << 22); // set PA11 as input mode
 
-	// C12880MA TRG pin (PB4)
+	// C12880MA TRG pin (PB4), for saving ADC result
 	GPIOB->MODER &= ~(0b11 << 8); // set PB4 as input mode
 
 	// C12880MA EOS pin (PB3)
@@ -291,7 +283,7 @@ void Init_C12880MA_ADC() {
 
 } // Init_C12880MA_ADC()
 
-void Init_TIM() {
+void Init_C12880MA_TIM() {
 	//////////////////////////////////////////////////////////////////////////////////////////
 	RCC->APB1ENR |= (1 << 0); // enable TIM2 (32-bit counter)
 							  // this is configured to 100 MHz (APB1 Timer CLK)
@@ -313,8 +305,6 @@ void Init_TIM() {
 	TIM2->CCER 	|=  (1 << 0); 		// CC1E: OC1 is output on corresponding pin (PA0)
 
 	TIM2->CR2 |= (0b010 << 4); // Master Mode: UEV as TRGO
-
-	TIM2->DIER |= (1 << 0); // Update Interrupt Enable
 
 	TIM2->CNT &= ~(0xFFFFFFFF); // set count to 0 (TIM2 is 32-bit)
 	TIM2->CR1 &= ~(1 << 0); // disable TIM2 for now
@@ -385,7 +375,8 @@ void C12880MA_ST(uint32_t st_pulse_width) {
 	TIM2->CR1 |=  (1 << 0); // enable timer
 }
 
-void C12880MA_start(uint16_t channel_readings[288], uint32_t on_time, uint32_t sensor_clk_cycles) {
+/* DEPRECATED */ 
+void _C12880MA_start(uint16_t channel_readings[288], uint32_t on_time, uint32_t sensor_clk_cycles) {
 	ADC1->CR2 |= (1 << 0); // enable ADC
 	ADC1->CR2 |= (0b01 << 28); // enable rising edge trigger detection
 	// NOTE: we are enabling edge detection here, which will start the ADC

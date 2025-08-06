@@ -188,31 +188,29 @@ int main(void)
 		  ///////////////////////////////////////////////////////////////////////////////////
 		  ///////////////////////// ADC CHARACTERIZATION ROUTINE ////////////////////////////
 		  ///////////////////////////////////////////////////////////////////////////////////
-//		  UART_printf("Button pressed. Initiating measurement 6000 ADC Measurements...\r\n");
+//		  UART_printf("Button pressed. Initiating measurement 200 ADC Measurements...\r\n");
 //		  BUTTON_PRESS = NOT_PRESSED;
-//		  int adc_char_done = 0;
-//		  ADC_readings[200] = 0;
-//		  sensor_clk_cycles = 0;
-//		  ADC1->CR2 |= (1 << 0); // enable ADC
+//		   ADC_readings[200] = 0;
+//		   sensor_clk_cycles = 0;
+//		   ADC1->CR2 |= (1 << 0); // enable ADC
 //		  NVIC_EnableIRQ(EXTI4_IRQn); // Interrupt enabled for PB4
-//		  UART_printf("\r\n(%d) All initialization done. Recording ADC\r\n", sensor_clk_cycles);
 //
-//		  delay_ms(1);
+//		   while (sensor_clk_cycles <= 200) {}
 //
-//		  NVIC_DisableIRQ(EXTI4_IRQn); // Interrupt disabled for PB4
-//		  ADC1->CR2 &= ~(1 << 0); // disable ADC
-//		  UART_printf("\r\n(%d) All initialization done. Recording ADC\r\n", sensor_clk_cycles);
-//		  for (int i = 0; i < 200; ++i) {
-//			  UART_printf("\r\n%3d: %4d", i, ADC_readings[i]);
-//		  }
+//		   NVIC_DisableIRQ(EXTI4_IRQn); // Interrupt disabled for PB4
+//		   ADC1->CR2 &= ~(1 << 0); // disable ADC
+//		   UART_printf("200 A/D Conversions DONE.\r\n");
+//		   for (int i = 0; i < 200; ++i) {
+//			   UART_printf("\r\n%3d: %4d", i, ADC_readings[i]);
+//		   }
 //
-//		  uint16_t min = minValue(ADC_readings, 200);
-//		  uint16_t max = maxValue(ADC_readings, 200);
-//		  uint32_t sum = arraySum(ADC_readings, 200);
-//		  UART_printf("\r\nSum: %d", sum); // cant print variable avg, ewan kung baket
-//		  UART_printf("\r\nMin: %7d", min);
-//		  UART_printf("\r\nMax: %7d", max);
-//		  UART_printf("\r\nRange: %5d", max-min);
+//		   uint16_t min = minValue(ADC_readings, 200);
+//		   uint16_t max = maxValue(ADC_readings, 200);
+//		   uint32_t sum = arraySum(ADC_readings, 200);
+//		   UART_printf("\r\nSum: %d", sum); // cant print variable avg, ewan kung baket
+//		   UART_printf("\r\nMin: %7d", min);
+//		   UART_printf("\r\nMax: %7d", max);
+//		   UART_printf("\r\nRange: %5d", max-min);
 
 		  ///////////////////////////////////////////////////////////////////////////////////
 		  ///////////////////////////// NEW C12880MA ROUTINE ////////////////////////////////
@@ -234,54 +232,6 @@ int main(void)
 		  for (int i=0; i<288; ++i) {
 			UART_printf("%5d,", C12880_readings[i]);
 		  }
-		  ///////////////////////////////////////////////////////////////////////////////////
-		  /////////////////////////////// C12880MA ROUTINE //////////////////////////////////
-		  ///////////////////////////////////////////////////////////////////////////////////
-//		  clear_C12880MA_readings(C12880_readings);
-////		  C12880MA_done = 0;
-//		  start_sig_done = 0;
-//		  start_conv_flag = 0;
-//
-//		  UART_printf("Button pressed. Initiating measurement with C12880MA...\r\n");
-////		  C12880MA_start(C12880_readings, 5000, sensor_clk_cycles);
-//
-//		  sensor_clk_cycles = 0; // reset to start count
-//
-//		  TIM1->CNT = ~(0xFFFFFFFF); // zero the counter registers
-//		  TIM2->CNT = ~(0xFFFFFFFF); // zero the counter registers
-//		  TIM1->ARR = 85; // wait time
-//		  TIM2->ARR = 20000; // integration time (tint) to 10 ms
-//
-//		  ADC1->CR2 |= (1 << 0); // enable ADC
-//		  ADC1->CR2 |= (0b01 << 28); // enable rising edge trigger detection
-//		  // NOTE: we are enabling edge detection here, which will start the ADC
-//		  // immediately, but we will not be saving the values until later
-//		  UART_printf("(%u) Initializations done. Starting process\r\n", sensor_clk_cycles);
-//
-//		  // --------------------- START SIGNAL ---------------------
-//		  TIM2->CR1 |= (1 << 0); // start timer
-//		  UART_printf("(%u) START asserted. Waiting for on_time to complete.\r\n", sensor_clk_cycles);
-//
-//		  while (!start_sig_done) {} // wait for ST pulse to finish. this flag is set by the timer interrupt handler
-//
-//		  UART_printf("(%u) on_time done: START deasserted. Waiting for values to be ready, then reading ADC\r\n", sensor_clk_cycles);
-//
-//		  sensor_clk_cycles = 0;
-//		  NVIC_EnableIRQ(EXTI4_IRQn); // enable interrupt from TRG
-//
-//		  // the rest of the routine is handled by EXTI4 handler
-//		  delay_ms(1); // ensure done
-//
-//		  for (int i=0; i<288; ++i) {
-//		  	UART_printf("ch %3d: %5d\r\n", i+1, C12880_readings[i]);
-//		  }
-//		  uint16_t min = minValue(C12880_readings, 288);
-//		  uint16_t max = maxValue(C12880_readings, 288);
-//		  uint32_t sum = arraySum(C12880_readings, 288);
-//		  UART_printf("\r\nSum: %d", sum); // cant print variable avg, ewan kung baket
-//		  UART_printf("\r\nMin: %7d", min);
-//		  UART_printf("\r\nMax: %7d", max);
-//		  UART_printf("\r\nRange: %5d", max-min);
 
 		  ///////////////////////////////////////////////////////////////////////////////////
 		  //////////////////////////////// AS7343 ROUTINE ///////////////////////////////////
@@ -587,23 +537,11 @@ void TIM1_CC_IRQHandler(void) {
 
 void EXTI4_IRQHandler(void) {
 	EXTI->PR |= (1 << 4); // clear flag
-	if (sensor_clk_cycles <= 6000) {
-		ADC_readings[sensor_clk_cycles] = ADC1->DR;
-	}
+
+	// for sensor measuring routine
+	ADC_readings[sensor_clk_cycles] = ADC1->DR;
+
 	++sensor_clk_cycles;
-//	if (start_sig_done && (sensor_clk_cycles == 10)) {
-//		start_conv_flag = 1; // we can now start storing the result of AD conversion
-//	}
-//	if (start_sig_done && start_conv_flag && (sensor_clk_cycles != 298)) {
-//		C12880_readings[sensor_clk_cycles-10] = ADC1->DR;
-//	}
-//	if (start_sig_done && start_conv_flag && (sensor_clk_cycles >= 298)) {
-//	  	UART_printf("(%d) Finished. Turning off peripherals.\r\n", sensor_clk_cycles);
-//
-//	  	NVIC_DisableIRQ(EXTI4_IRQn);
-//	  	ADC1->CR2 &= ~(0b11 << 28); // disable rising edge trigger detection
-//	  	ADC1->CR2 &= ~(1 << 0);
-//	}
 }
 
 void EXTI3_IRQHandler(void) {
