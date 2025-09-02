@@ -74,7 +74,7 @@ int pressed = 0;
 uint32_t sensor_clk_cycles;
 //int start_conv_flag = 0; // for C12880MA routine
 //int start_sig_done = 0;
-uint16_t ADC_readings[200] = {0};
+uint16_t ADC_readings[300];
 int eos;
 
 char *txb_ptr = 0; // for transmitting to ESP32 via I2C
@@ -107,7 +107,7 @@ static const uint8_t banner[] =
 
 uint64_t AS7343_reads_cumm[12];
 uint16_t AS7343_reads_curr[12];
-uint16_t C12880_readings[288];
+uint16_t C12880MA_readings[288];
 /* USER CODE END 0 */
 
 /**
@@ -152,19 +152,19 @@ int main(void)
   uint8_t labels[] = "\r\n+-----+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+"
 		  	  	  	     "\r\n   nm |   405   |   425   |   450   |   475   |   515   |   550   |   555   |   600   |   640   |   690   |   745   |   855   "
   	  	  	     	   "\r\n   ch |   F1    |   F2    |   FZ    |   F3    |   F4    |   F5    |   FY    |   FXL   |   F6    |   F7    |   F8    |   NIR   \r\n";
-  uint8_t divider[] = "\r\n+-----+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+";
-  int reps = 20;
+//  uint8_t divider[] = "\r\n+-----+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+---------+";
+//  int reps = 20;
 //  UART_printf("Initializing ESP32 comm...");
 //  Init_I2C2();
 //  UART_printf("DONE\r\n");
-//
-//  UART_printf("Initializing AS7343...");
-//  Init_AS7343();
-//  UART_printf("DONE\r\n");
 
-  UART_printf("Initializing C12880MA...");
-  Init_C12880MA();
-  UART_printf("Now ready.\r\n");
+  UART_printf("Initializing AS7343...");
+  Init_AS7343();
+  UART_printf("DONE\r\n");
+
+//  UART_printf("Initializing C12880MA...");
+//  Init_C12880MA(C12880MA_readings);
+//  UART_printf("Now ready.\r\n");
 
 
 
@@ -190,73 +190,90 @@ int main(void)
 		  ///////////////////////////////////////////////////////////////////////////////////
 //		  UART_printf("Button pressed. Initiating measurement 200 ADC Measurements...\r\n");
 //		  BUTTON_PRESS = NOT_PRESSED;
-//		   ADC_readings[200] = 0;
-//		   sensor_clk_cycles = 0;
-//		   ADC1->CR2 |= (1 << 0); // enable ADC
-//		  NVIC_EnableIRQ(EXTI4_IRQn); // Interrupt enabled for PB4
+//      eos=0;
+//      DMA2_S0_Set_DstAddr(*ADC_readings);
+//      DMA2_S0_Set_NumofDataTransfers(200);
 //
-//		   while (sensor_clk_cycles <= 200) {}
+//      DMA2_Stream0->CR = (uint32_t) DMA_Config_EnableDMA;
+//      NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+//      UART_printf("DMA Ready. Now Enabling ADC...\r\n");
+//		  ADC1->CR2 |= (1 << 0); // enable ADC
+//      UART_printf("Conversions ongoing...\r\n");
+//		  // NVIC_EnableIRQ(EXTI4_IRQn); // Interrupt enabled for PB4
 //
-//		   NVIC_DisableIRQ(EXTI4_IRQn); // Interrupt disabled for PB4
-//		   ADC1->CR2 &= ~(1 << 0); // disable ADC
-//		   UART_printf("200 A/D Conversions DONE.\r\n");
-//		   for (int i = 0; i < 200; ++i) {
-//			   UART_printf("\r\n%3d: %4d", i, ADC_readings[i]);
-//		   }
+//		  // while (sensor_clk_cycles <= 200) {}
 //
-//		   uint16_t min = minValue(ADC_readings, 200);
-//		   uint16_t max = maxValue(ADC_readings, 200);
-//		   uint32_t sum = arraySum(ADC_readings, 200);
-//		   UART_printf("\r\nSum: %d", sum); // cant print variable avg, ewan kung baket
-//		   UART_printf("\r\nMin: %7d", min);
-//		   UART_printf("\r\nMax: %7d", max);
-//		   UART_printf("\r\nRange: %5d", max-min);
+//		  // NVIC_DisableIRQ(EXTI4_IRQn); // Interrupt disabled for PB4
+//      // DMA is automatically disabled after 288 data transfers
+//
+//      while (eos != 1) {}
+//
+//		  UART_printf("288 A/D Conversions DONE.\r\n");
+//		  for (int i = 0; i < 200; ++i) {
+//			  UART_printf("%4d,", C12880MA_readings[i]);
+//		  }
+//
+//		  uint16_t min = minValue(ADC_readings, 200);
+//		  uint16_t max = maxValue(ADC_readings, 200);
+//		  uint32_t sum = arraySum(ADC_readings, 200);
+//		  UART_printf("\r\nSum: %d", sum); // cant print variable avg, ewan kung baket
+//		  UART_printf("\r\nMin: %7d", min);
+//		  UART_printf("\r\nMax: %7d", max);
+//		  UART_printf("\r\nRange: %5d", max-min);
 
 		  ///////////////////////////////////////////////////////////////////////////////////
 		  ///////////////////////////// NEW C12880MA ROUTINE ////////////////////////////////
 		  ///////////////////////////////////////////////////////////////////////////////////
-		  BUTTON_PRESS = NOT_PRESSED;
-		  UART_printf("Button pressed. Initiating measurement with C12880MA...\r\n");
-		  sensor_clk_cycles=0;
-		  eos = 0;
-		  C12880MA_ST(1000);
+		  // BUTTON_PRESS = NOT_PRESSED;
+		  // UART_printf("\r\n\nButton pressed. Initiating measurement with C12880MA...\r\n");
+		  // sensor_clk_cycles=0;
+		  // eos = 0;
+		  // C12880MA_ST(1000);
 
-		  while (eos != 1) {}
-		  // disable and deinit peripherals
-		  // TIM2, TIM1 already disabled (one-pulse)
-		  NVIC_DisableIRQ(TIM1_CC_IRQn);
-		  NVIC_DisableIRQ(EXTI4_IRQn);
-		  NVIC_DisableIRQ(EXTI3_IRQn);
-		  eos = 0;
-		  UART_printf("Program finished.\r\n");
-		  for (int i=0; i<288; ++i) {
-			UART_printf("%5d,", C12880_readings[i]);
-		  }
+		  // while (eos != 1) {}
+		  // // disable and deinit peripherals
+		  // // TIM2, TIM1 already disabled (one-pulse)
+		  // NVIC_DisableIRQ(TIM1_CC_IRQn);
+		  // // NVIC_DisableIRQ(EXTI4_IRQn);
+		  // NVIC_DisableIRQ(EXTI3_IRQn);
+		  // eos = 0;
+
+
+		  // UART_printf("Program finished.\r\n");
+		  // for (int i=0; i<288; ++i) {
+			// UART_printf("%4d,", ADC_readings[i]);
+		  // }
 
 		  ///////////////////////////////////////////////////////////////////////////////////
 		  //////////////////////////////// AS7343 ROUTINE ///////////////////////////////////
 		  ///////////////////////////////////////////////////////////////////////////////////
-//		  BUTTON_PRESS = NOT_PRESSED;
-// 		  HAL_UART_Transmit(&huart2, pressed_msg, sizeof(pressed_msg)-1, 1000);
-//
-// 		  clear_AS7343_readings(AS7343_reads_curr);
-//
-//// 		  AS7343_default_config();
-//
-// 		  AS7343_set_ATIME(1);
-// 		  AS7343_set_ASTEP(26999);
-// 		  AS7343_set_AGAIN(AS7343_GAIN_256X);
-//
-// 		  uint8_t ATIME = AS7343_get_ATIME();
-// 		  uint16_t ASTEP = AS7343_get_ASTEP();
-// 		  uint8_t AGAIN = AS7343_get_AGAIN();
-// 		  UART_printf("\r\nATIME = %3d", ATIME);
-// 		  UART_printf("\r\nASTEP = %3d", ASTEP);
-// 		  UART_printf("\r\nAGAIN = %3d\n", AGAIN);
-//
-// 		  UART_printf("\r\nNow finding raw spectrum (unoptimized)...\n");
-//
-// 		  // averaging {reps} number of repeated measurements
+		  BUTTON_PRESS = NOT_PRESSED;
+ 		  HAL_UART_Transmit(&huart2, pressed_msg, sizeof(pressed_msg)-1, 1000);
+
+ 		  clear_AS7343_readings(AS7343_reads_curr);
+
+ 		  UART_printf("Reading buffer cleared. Configuring AS7343...\r\n");
+
+ 		  AS7343_default_config();
+
+ 		  AS7343_set_ATIME(4);
+ 		  AS7343_set_ASTEP(27999);
+ 		  AS7343_set_AGAIN(AS7343_GAIN_256X);
+
+// 		  AS7343_auto_smux(mode0_6ch);
+
+ 		  UART_printf("Configuration Done. Parameters are:\r\n");
+
+ 		  uint8_t ATIME = AS7343_get_ATIME();
+ 		  uint16_t ASTEP = AS7343_get_ASTEP();
+ 		  uint8_t AGAIN = AS7343_get_AGAIN();
+ 		  UART_printf("\r\nATIME = %3d", ATIME);
+ 		  UART_printf("\r\nASTEP = %3d", ASTEP);
+ 		  UART_printf("\r\nAGAIN = %3d\n", AGAIN);
+
+ 		  UART_printf("\r\nNow finding raw spectrum (unoptimized)...\r\n");
+
+ 		  // averaging {reps} number of repeated measurements
 // 		  for (int rep = 0; rep < reps; ++rep) {
 // 	 		  AS7343_get_raw_spectrum(AS7343_reads_curr);
 // 	 		  // print iteration
@@ -266,8 +283,8 @@ int main(void)
 // 	 			  AS7343_reads_cumm[i] += (uint64_t) (AS7343_reads_curr[i]); // add
 // 	 		  }
 // 		  }
-// //		  AS7343_readings[0] = AS7343_read_2b(AS7343_CH12_DATA_L);
-// //		  AS7343_readings[1] = AS7343_read_2b(AS7343_CH6_DATA_L);
+ //		  AS7343_readings[0] = AS7343_read_2b(AS7343_CH12_DATA_L);
+ //		  AS7343_readings[1] = AS7343_read_2b(AS7343_CH6_DATA_L);
 //
 // 		  HAL_UART_Transmit(&huart2, divider, sizeof(divider)-1, 1000);
 // 		  UART_printf("\r\n  avg");
@@ -277,19 +294,28 @@ int main(void)
 // 		  HAL_UART_Transmit(&huart2, labels, sizeof(labels)-1, 1000);
 
 
-// 		  UART_printf("\nNow finding raw spectrum (optimized). Resetting first... ");
-// 		  AS7343_reset();
+ 		  AS7343_get_raw_spectrum(AS7343_reads_curr);
+
+ 		  for (int i = 0; i < 12; ++i) {
+ 			  UART_printf("%d\r\n", AS7343_reads_curr[i]);
+ 		  }
+
+
+
+// 		  UART_printf("\nNow finding raw spectrum (optimized). Clearing buffer & reconfiguring... ");
+// 		  clear_AS7343_readings(AS7343_reads_curr);
+//// 		  AS7343_reset();
 // 		  AS7343_default_config();
-// 		  UART_printf("reset and config done\r\n");
-// 		  AS7343_get_raw_spectrum_optimized(AS7343_readings, 10);
-// 		  AS7343_readings[0] = AS7343_read_2b(AS7343_CH12_DATA_L);
-// 		  AS7343_readings[1] = AS7343_read_2b(AS7343_CH6_DATA_L);
+// 		  UART_printf("clear and config done\r\n");
+// 		  AS7343_get_raw_spectrum_optimized(AS7343_reads_curr, 10);
+// 		  AS7343_reads_curr[0] = AS7343_read_2b(AS7343_CH12_DATA_L);
+// 		  AS7343_reads_curr[1] = AS7343_read_2b(AS7343_CH6_DATA_L);
 //
-// 		  HAL_UART_Transmit(&huart2, vals, sizeof(vals)-1, 1000);
+//// 		  HAL_UART_Transmit(&huart2, vals, sizeof(vals)-1, 1000);
 // 		  for (int i = 0; i < 12; ++i) {
-// 			  UART_printf(" | %5d", AS7343_readings[i]);
+// 			  UART_printf("%5d\r\n", AS7343_reads_curr[i]);
 // 		  }
-// 		  HAL_UART_Transmit(&huart2, labels, sizeof(labels)-1, 1000);
+//// 		  HAL_UART_Transmit(&huart2, labels, sizeof(labels)-1, 1000);
 
 		  ///////////////////////////////////////////////////////////////////////////////////
 		  //////////////////////////////// ESP32 ROUTINE ////////////////////////////////////
@@ -530,17 +556,17 @@ void TIM3_Init(void) {
 
 void TIM1_CC_IRQHandler(void) {
   TIM1->DIER &= ~(1 << 3); // disable interrupt on compare
-//  GPIOB->ODR |= (1 << 5); // set output as HIGH
-  ADC1->CR2 |= (1 << 0);
-  NVIC_EnableIRQ(EXTI4_IRQn); // enable saving of values
+  // GPIOB->ODR |= (1 << 5); // set output as HIGH
+  ADC1->CR2 |= (1 << 0); // enable ADC
+  // NVIC_EnableIRQ(EXTI4_IRQn); // enable saving of values
 }
 
+/**
+ * No longer needed. Storing results offloaded to DMA
+ */
 void EXTI4_IRQHandler(void) {
 	EXTI->PR |= (1 << 4); // clear flag
-
-	// for sensor measuring routine
 	ADC_readings[sensor_clk_cycles] = ADC1->DR;
-
 	++sensor_clk_cycles;
 }
 
@@ -548,6 +574,14 @@ void EXTI3_IRQHandler(void) {
 	EXTI->PR |= (1 << 3); // clear flag
 //	GPIOB->ODR &= ~(1 << 5); // toggle output low
 	eos = 1;
+}
+
+// EXTI3_IRQ
+
+void DMA2_Stream0_IRQHandler(void) {
+  NVIC_DisableIRQ(DMA2_Stream0_IRQn);
+	ADC1->CR2 &= ~(1 << 0); // disable ADC
+  eos=1;
 }
 
 void UART_printf(char *format, ...) {
@@ -570,9 +604,9 @@ void delay_ms(uint16_t ms) {
 	}
 }
 
-void clear_C12880MA_readings(uint16_t C12880_readings[288]) {
+void clear_C12880MA_readings(uint16_t C12880MA_readings[288]) {
   for (int i=0; i < 288; ++i) {
-    C12880_readings[i] = 0;
+    C12880MA_readings[i] = 0;
   }
 }
 
