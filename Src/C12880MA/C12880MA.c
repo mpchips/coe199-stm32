@@ -147,6 +147,8 @@ void Init_C12880MA_GPIO() {
 
 	GPIOC->ODR &= ~(1 << 7); // set as initially LOW
 
+	UART_printf("\r\n\tPC7  OK...");
+
 	// C12880MA CLK pin (PA8)
 	GPIOA->MODER |= (1 << 17); // set PA8 as alternate function
 	GPIOA->MODER &= ~(1 << 16);
@@ -155,15 +157,21 @@ void Init_C12880MA_GPIO() {
 
 	GPIOA->OSPEEDR |= (0b11 << 16); // set as high speed output
 
+	UART_printf("\r\n\tPA8  OK...");
+
 	// C12880MA ST pin (PA0)
 	GPIOA->MODER |= (0b10 << 0); // set PA0 as alternate function
 
 	GPIOA->AFR[0] |= (0x00000001); // set to TIM2_CH1 function (AF1 = 0b0001)
 
+	UART_printf("\r\n\tPA0  OK...");
+
 	// C12880MA temp output pin (of TIM1) PA10)
 	GPIOA->MODER |= (0b10 << 20); // set PA10 as alternate function
 
 	GPIOA->AFR[1] |= (0x00000100); // set to TIM1_CH3 function (AF1 = 0b0001)
+
+	UART_printf("\r\n\tPA10 OK...");
 
 	// PB5: temporary output to check if timer interrupt handler is being called
 	GPIOB->MODER |= (0b01 << 10);	// set PB5 as output mode
@@ -173,17 +181,31 @@ void Init_C12880MA_GPIO() {
 
 	GPIOB->ODR &= ~(1 << 5); // set as initially LOW
 
+	UART_printf("\r\n\tPB5  OK...");
+
 	// C12880MA video pin (PA6) << source of analog input for ADC
 	GPIOA->MODER |= (0b11 << 12); // set PA6 as analog mode
 
+	UART_printf("\r\n\tPA6  OK...");
+
 	// C12880MA TRG pin (PA11), for ADC triggering
 	GPIOA->MODER &= ~(0b11 << 22); // set PA11 as input mode
+	GPIOA->PUPDR |=  (0b10 << 22); // pull-down
+
+	UART_printf("\r\n\tPA11  OK...");
 
 	// C12880MA TRG pin (PB4), for saving ADC result
 	GPIOB->MODER &= ~(0b11 << 8); // set PB4 as input mode
+	GPIOB->PUPDR |=  (0b10 << 8); // pull-down
+
+	UART_printf("\r\n\tPB4  OK...");
 
 	// C12880MA EOS pin (PB3)
 	GPIOB->MODER &= ~(0b11 << 6); // set PB3 as input mode
+	GPIOB->PUPDR |=  (0b10 << 6); // pull-down
+
+	UART_printf("\r\n\tPB3  OK...");
+	UART_printf("ALL OK.");
 
 } // Init_C12880MA_GPIO()
 
@@ -210,8 +232,8 @@ void Init_C12880MA_EXTI() {
 	// 		 This is to allow interrupt-based triggering of ADC.
 	//-------------------------------------------------------------------
 
-	SYSCFG->EXTICR[2] &= ~(0xF << 12); // enable EXTI for PA11 (TRG pin)
-	EXTI->IMR |= (1 << 11); // disable mask on EXTI11
+	// SYSCFG->EXTICR[2] &= ~(0xF << 12); // enable EXTI for PA11 (TRG pin)
+	// EXTI->IMR |= (1 << 11); // disable mask on EXTI11
 
 	// no need to configure edge trigger here
 
@@ -340,7 +362,9 @@ void Init_C12880MA_TIM() {
 } // Init_C12880MA_TIM()
 
 void Init_C12880MA_DMA(uint16_t C12880MA_readings[288]) {
-	DMA2_Stream0->CR = 
+	RCC->AHB1ENR |= (1 << 22); // enable DMA2 clk
+
+	DMA2_Stream0->CR = (uint32_t)
 			(0b000 << 25) 	// channel 0 (ADC1)
 		|	(0b10  << 16)	// high priority
 		|	(0b01  << 13)	// memory data size: half-word (16 bits)
@@ -348,18 +372,20 @@ void Init_C12880MA_DMA(uint16_t C12880MA_readings[288]) {
 		|	(0b1   << 10)	// increment memory address after every transfer
 		|	(0b0   <<  9)	// DONT increment periph address after transfer
 		|	(0b00  <<  6)	// direction: peripheral-to-memory
-		|	(0b1   <<  5)	// peripheral is the flow controller
+		|	(0b0   <<  5)	// DMA is the flow controller
 		|	(0b1   <<  4)	// enable interrupt on transfer complete
+		| (0b1   <<  2) // enable interrupt on transfer error
 	; // this is = 0x00022C30
 	// NOTE: burst transfer config automatically forced to 00 for Direct Mode.
 
-	DMA2_Stream0->NDTR = 288; // store 288 pixels worth of data
-	DMA2_Stream0->PAR = ADC1->DR;
-	DMA2_Stream0->M0AR = (uint32_t) C12880MA_readings;
+	DMA2_Stream0->NDTR = (uint32_t)288; // store 288 pixels worth of data
+	DMA2_Stream0->PAR = (uint32_t)&ADC1->DR;
+	DMA2_Stream0->M0AR = (uint32_t)&C12880MA_readings[0];
 	// NOTE: M1AR only needed for double buffer mode. no need to configure
 	// NOTE: Direct mode is enabled by default. no need to configure
 
-    NVIC_SetPriority(DMA2_Stream0_IRQn, 5);
+  NVIC_SetPriority(DMA2_Stream0_IRQn, 5);
+  NVIC_EnableIRQ(DMA2_Stream0_IRQn);
 } // Init_C12880MA_DMA()
 
 void DMA2_S0_Set_DstAddr(uint32_t DstAddr) {
@@ -398,9 +424,15 @@ void C12880MA_ST(uint32_t st_pulse_width) {
 	TIM1->CR1 &= ~(1 << 0); // disable timer
 	TIM1->PSC |= (9 << 0); // pre-scaler = 9 + 1 so that f_eff = 10 MHz
 	TIM1->CNT &= ~(0xFFFFFFFF); // set count to 0 (TIM2 is 32-bit)
+  TIM1->DIER |= (1 << 3); // enable interrupt on compare
 
 	NVIC_EnableIRQ(TIM1_CC_IRQn); // enable tim1 interrupt
 	NVIC_EnableIRQ(EXTI3_IRQn); // enable EOS interrupt now
+
+	DMA2_Stream0->CR = (uint32_t) DMA_Config_DisableDMA; // ensure DMA is disabled before configuration
+  DMA2_S0_Set_NumofDataTransfers(288);
+
+	DMA2_Stream0->CR = DMA_Config_EnableDMA; // enable DMA now
 
 	TIM2->CR1 |=  (1 << 0); // enable timer
 } // C12880MA_ST()

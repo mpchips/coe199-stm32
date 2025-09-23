@@ -22,8 +22,14 @@
 #define B4  8.663338298e-09
 #define B5  7.654515822e-12
 
-#define DMA_Config_DisableDMA 0x00022C30
-#define DMA_Config_EnableDMA  0x00022C31
+#define DMA_Config_DisableDMA 	0x00022C14
+#define DMA_Config_EnableDMA  	0x00022C15
+
+#define DMA_S0_XferCpltFlag			0x00000020
+#define DMA_S0_HalfXferCpltFlag	0x00000010
+#define DMA_S0_XferErrFlag			0x00000008
+#define DMA_S0_DirModeErrFlag		0x00000004
+#define DMA_S0_FIFOErrFlag			0x00000001
 
 
 /**
