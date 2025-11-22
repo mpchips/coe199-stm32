@@ -447,6 +447,16 @@ void AS7343_raw_to_basic(uint16_t raw_spectrum[12], float basic_spectrum[12]) {
 	}
 }
 
+void AS7343_raw_to_abs(float abs_spectrum[12], uint16_t sample_readings[12], float blank_readings[12]) {
+	for (int i=0; i<12; i++) {
+		if (blank_readings[i] == 0.0) {
+			abs_spectrum[i] = 0;
+		} else {
+			abs_spectrum[i] = (float) ((float) sample_readings[i]) / blank_readings[i];
+		}
+	}
+}
+
 uint16_t AS7343_read_channel(AS7343_color_channel_t channel) {
 	uint16_t ret_val = 0x0000;
 	uint8_t reg_read_val = 0x00;

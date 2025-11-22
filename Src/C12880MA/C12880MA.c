@@ -291,12 +291,12 @@ void Init_C12880MA_ADC() {
 
 	ADC1->CR2 &= ~(1 << 11); // right-align data
 
-	ADC1->CR2 &= ~(1 << 9); // no new DMA requests after last transfer (DMA NDTR)
+	ADC1->CR2 |=  (1 << 9); // DMA request issued as long as request is made and bit 8 is set
 	ADC1->CR2 |=  (1 << 8); // DMA mode enabled
 
 	ADC1->CR2 &= ~(1 << 1); // single conversion mode
 
-	ADC1->CR2 &= ~(1 << 0); // ADC off for now [][][][][][][][][][][][][]
+	ADC1->CR2 &= ~(1 << 0); // ADC off for now
 
 } // Init_C12880MA_ADC()
 
@@ -432,7 +432,7 @@ void C12880MA_ST(uint32_t st_pulse_width) {
 	DMA2_Stream0->CR = (uint32_t) DMA_Config_DisableDMA; // ensure DMA is disabled before configuration
   DMA2_S0_Set_NumofDataTransfers(288);
 
-	DMA2_Stream0->CR = DMA_Config_EnableDMA; // enable DMA now
+	DMA2_Stream0->CR = (uint32_t) DMA_Config_EnableDMA; // enable DMA now
 
 	TIM2->CR1 |=  (1 << 0); // enable timer
 } // C12880MA_ST()

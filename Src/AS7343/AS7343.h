@@ -353,6 +353,15 @@ void AS7343_read_spectrum(uint16_t channel_readings[12]);
 
 void AS7343_raw_to_basic(uint16_t raw_spectrum[12], float basic_spectrum[12]);
 
+/**
+ * @brief convert raw ADC output to absorbance using hard-coded readings of reference blanks.
+ *
+ * @param abs_spectrum (float) - float array where absorbance will be stored
+ * @param sample_readings (uint16_t) - array of readings of the sample
+ * @param blank_readings (flooat) - array of readings of blank (water only)
+ */
+void AS7343_raw_to_abs(float abs_spectrum[12], uint16_t sample_readings[12], float blank_readings[12]);
+
 uint16_t AS7343_read_channel(AS7343_color_channel_t channel);
 
 int AS7343_readings_valid();
