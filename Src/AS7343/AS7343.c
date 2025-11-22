@@ -42,18 +42,18 @@ AS7343_color_channel_t vis_nir_channels[12] = {
  * 	      in the vis-nir range.
  */
 uint16_t vis_nir_bands[12] = {
-	405,
-	425,
-	450,
-	475,
-	515,
-	550,
-	555,
-	600,
-	640,
-	690,
-	745,
-	855,
+405,
+425,
+450,
+475,
+515,
+550,
+555,
+600,
+640,
+690,
+745,
+855,
 };
 
 AS7343_gain_t AGAIN_lookup[13] = {
@@ -417,8 +417,14 @@ void AS7343_get_basic_spectrum(float basic_spectrum[12]) {
 void AS7343_get_raw_spectrum(uint16_t channel_readings[12]) {
 	AS7343_enable();
 
+//	UART_printf("AS7343 enabled. Waiting for measurement to finish...\r\n");
+
 	while (!AS7343_done()); // wait for measurement to finish
+//	UART_printf("Measurement finished. Saving output to buffer...\r\n");
 	AS7343_read_spectrum(channel_readings);
+
+
+//	UART_printf("Done. Values are ready to be read.\r\n");
 
 	AS7343_disable();
 } // AS7343_get_raw_spectrum()
@@ -438,6 +444,16 @@ void AS7343_raw_to_basic(uint16_t raw_spectrum[12], float basic_spectrum[12]) {
 
 	for (int i=0 ; i < sizeof(raw_spectrum)/2; ++i) {
 		basic_spectrum[i] = (float) raw_spectrum[i]/(gain*t_int); // formula from EVK user manual
+	}
+}
+
+void AS7343_raw_to_abs(float abs_spectrum[12], uint16_t sample_readings[12], float blank_readings[12]) {
+	for (int i=0; i<12; i++) {
+		if (blank_readings[i] == 0.0) {
+			abs_spectrum[i] = 0;
+		} else {
+			abs_spectrum[i] = (float) ((float) sample_readings[i]) / blank_readings[i];
+		}
 	}
 }
 

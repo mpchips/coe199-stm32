@@ -36,20 +36,10 @@
 #include <C12880MA.h>
 #include <main.h>
 
-// coefficients to convert pixel number to wavelength
-// obtained from sensor's final inspection sheet (provided with sensor)
-// wavelength(px) = A0 + B1*px + B2*px^2 + B3*px^3 + B4*px^4 + B5*px^5
-#define A0  3.195480337e+02
-#define B1  2.690839446e+00
-#define B2 -1.092565127e-03
-#define B3 -7.882067953e-06
-#define B4  8.663338298e-09
-#define B5  7.654515822e-12
-
 
 #define ST_DELAY 3 // 3 cc delay between calling C12880MA_ST() and ST signal posedge
 
-void Init_C12880MA() {
+void Init_C12880MA(uint16_t C12880MA_readings[288]) {
 
 	  UART_printf("\r\n\tCLKOUT...");
 	  Init_C12880MA_CLKOUT();
@@ -65,6 +55,9 @@ void Init_C12880MA() {
 	  UART_printf("DONE");
 	  UART_printf("\r\n\tTIM...");
 	  Init_C12880MA_TIM();
+	  UART_printf("DONE\r\n");
+	  UART_printf("\r\n\tDMA...");
+	  Init_C12880MA_DMA(C12880MA_readings);
 	  UART_printf("DONE\r\n");
 }
 
@@ -155,6 +148,8 @@ void Init_C12880MA_GPIO() {
 
 	GPIOC->ODR &= ~(1 << 7); // set as initially LOW
 
+	UART_printf("\r\n\tPC7  OK...");
+
 	// C12880MA CLK pin (PA8)
 	GPIOA->MODER |= (1 << 17); // set PA8 as alternate function
 	GPIOA->MODER &= ~(1 << 16);
@@ -163,15 +158,21 @@ void Init_C12880MA_GPIO() {
 
 	GPIOA->OSPEEDR |= (0b11 << 16); // set as high speed output
 
+	UART_printf("\r\n\tPA8  OK...");
+
 	// C12880MA ST pin (PA0)
 	GPIOA->MODER |= (0b10 << 0); // set PA0 as alternate function
 
 	GPIOA->AFR[0] |= (0x00000001); // set to TIM2_CH1 function (AF1 = 0b0001)
 
+	UART_printf("\r\n\tPA0  OK...");
+
 	// C12880MA temp output pin (of TIM1) PA10)
 	GPIOA->MODER |= (0b10 << 20); // set PA10 as alternate function
 
 	GPIOA->AFR[1] |= (0x00000100); // set to TIM1_CH3 function (AF1 = 0b0001)
+
+	UART_printf("\r\n\tPA10 OK...");
 
 	// PB5: temporary output to check if timer interrupt handler is being called
 	GPIOB->MODER |= (0b01 << 10);	// set PB5 as output mode
@@ -181,17 +182,31 @@ void Init_C12880MA_GPIO() {
 
 	GPIOB->ODR &= ~(1 << 5); // set as initially LOW
 
+	UART_printf("\r\n\tPB5  OK...");
+
 	// C12880MA video pin (PA6) << source of analog input for ADC
 	GPIOA->MODER |= (0b11 << 12); // set PA6 as analog mode
 
+	UART_printf("\r\n\tPA6  OK...");
+
 	// C12880MA TRG pin (PA11), for ADC triggering
 	GPIOA->MODER &= ~(0b11 << 22); // set PA11 as input mode
+	GPIOA->PUPDR |=  (0b10 << 22); // pull-down
+
+	UART_printf("\r\n\tPA11  OK...");
 
 	// C12880MA TRG pin (PB4), for saving ADC result
 	GPIOB->MODER &= ~(0b11 << 8); // set PB4 as input mode
+	GPIOB->PUPDR |=  (0b10 << 8); // pull-down
+
+	UART_printf("\r\n\tPB4  OK...");
 
 	// C12880MA EOS pin (PB3)
 	GPIOB->MODER &= ~(0b11 << 6); // set PB3 as input mode
+	GPIOB->PUPDR |=  (0b10 << 6); // pull-down
+
+	UART_printf("\r\n\tPB3  OK...");
+	UART_printf("ALL OK.");
 
 } // Init_C12880MA_GPIO()
 
@@ -218,8 +233,8 @@ void Init_C12880MA_EXTI() {
 	// 		 This is to allow interrupt-based triggering of ADC.
 	//-------------------------------------------------------------------
 
-	SYSCFG->EXTICR[2] &= ~(0xF << 12); // enable EXTI for PA11 (TRG pin)
-	EXTI->IMR |= (1 << 11); // disable mask on EXTI11
+	// SYSCFG->EXTICR[2] &= ~(0xF << 12); // enable EXTI for PA11 (TRG pin)
+	// EXTI->IMR |= (1 << 11); // disable mask on EXTI11
 
 	// no need to configure edge trigger here
 
@@ -277,6 +292,9 @@ void Init_C12880MA_ADC() {
 
 	ADC1->CR2 &= ~(1 << 11); // right-align data
 
+	ADC1->CR2 |=  (1 << 9); // DMA request issued as long as request is made and bit 8 is set
+	ADC1->CR2 |=  (1 << 8); // DMA mode enabled
+
 	ADC1->CR2 &= ~(1 << 1); // single conversion mode
 
 	ADC1->CR2 &= ~(1 << 0); // ADC off for now
@@ -321,8 +339,8 @@ void Init_C12880MA_TIM() {
 	TIM1->CR1 &= ~(1 << 4); // DIR: up-counting
 	TIM1->CR1 |=  (1 << 3); // one-pulse mode: disable counter at update event (UEV)
 
-	TIM1->CCR3 	 = (443); 	// this sets t_delay before output is toggled
-	TIM1->ARR 	 = (445); 	// pulse duration default: 5ms (x0.5µs)
+	TIM1->CCR3 	 = (444); 	// 43.5 µs
+	TIM1->ARR 	 = (445); 	//
 	TIM1->CCMR2 |= (0b110 << 4); 	// OC3M: PWM 1 (high on CNT < CCR, low otherwise);
 	TIM1->CCMR2 &= ~(0b11 << 0); 	// CC3S: configured as OUTPUT
 	TIM1->EGR	|= (1 << 0);		// UG: ENABLED
@@ -342,6 +360,45 @@ void Init_C12880MA_TIM() {
 	TIM1->CR1 &= ~(1 << 0); // disable TIM1 for now
 
 	NVIC_SetPriority(TIM1_CC_IRQn, 5);  // Set Priority
+} // Init_C12880MA_TIM()
+
+void Init_C12880MA_DMA(uint16_t C12880MA_readings[288]) {
+	RCC->AHB1ENR |= (1 << 22); // enable DMA2 clk
+
+	DMA2_Stream0->CR = (uint32_t)
+			(0b000 << 25) 	// channel 0 (ADC1)
+		|	(0b10  << 16)	// high priority
+		|	(0b01  << 13)	// memory data size: half-word (16 bits)
+		|	(0b01  << 11)	// periph data size: half-word (16 bits)
+		|	(0b1   << 10)	// increment memory address after every transfer
+		|	(0b0   <<  9)	// DONT increment periph address after transfer
+		|	(0b00  <<  6)	// direction: peripheral-to-memory
+		|	(0b0   <<  5)	// DMA is the flow controller
+		|	(0b1   <<  4)	// enable interrupt on transfer complete
+		| (0b1   <<  2) // enable interrupt on transfer error
+	; // this is = 0x00022C30
+	// NOTE: burst transfer config automatically forced to 00 for Direct Mode.
+
+	DMA2_Stream0->NDTR = (uint32_t)288; // store 288 pixels worth of data
+	DMA2_Stream0->PAR = (uint32_t)&ADC1->DR;
+	DMA2_Stream0->M0AR = (uint32_t)&C12880MA_readings[0];
+	// NOTE: M1AR only needed for double buffer mode. no need to configure
+	// NOTE: Direct mode is enabled by default. no need to configure
+
+  NVIC_SetPriority(DMA2_Stream0_IRQn, 5);
+  NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+} // Init_C12880MA_DMA()
+
+void DMA2_S0_Set_DstAddr(uint32_t DstAddr) {
+	DMA2_Stream0->M0AR = DstAddr;
+}
+
+void DMA2_S0_Set_SrcAddr(uint32_t SrcAddr) {
+	DMA2_Stream0->PAR = SrcAddr;
+}
+
+void DMA2_S0_Set_NumofDataTransfers(uint32_t NumofDataTransfers) {
+	DMA2_Stream0->NDTR = NumofDataTransfers;
 }
 
 void C12880MA_set_tint(uint32_t tint) {
@@ -358,7 +415,7 @@ void C12880MA_set_tint(uint32_t tint) {
 }
 
 void C12880MA_ST(uint32_t st_pulse_width) {
-	Init_TIM();
+	Init_C12880MA_TIM();
 
 	TIM2->CR1 &= ~(1 << 0); // disable timer
 	TIM2->PSC |=  (49 << 0); // pre-scaler = 49 + 1; f_eff = 2 MHz (same as sensor CLK)
@@ -368,12 +425,18 @@ void C12880MA_ST(uint32_t st_pulse_width) {
 	TIM1->CR1 &= ~(1 << 0); // disable timer
 	TIM1->PSC |= (9 << 0); // pre-scaler = 9 + 1 so that f_eff = 10 MHz
 	TIM1->CNT &= ~(0xFFFFFFFF); // set count to 0 (TIM2 is 32-bit)
+  TIM1->DIER |= (1 << 3); // enable interrupt on compare
 
 	NVIC_EnableIRQ(TIM1_CC_IRQn); // enable tim1 interrupt
 	NVIC_EnableIRQ(EXTI3_IRQn); // enable EOS interrupt now
 
+	DMA2_Stream0->CR = (uint32_t) DMA_Config_DisableDMA; // ensure DMA is disabled before configuration
+  DMA2_S0_Set_NumofDataTransfers(288);
+
+	DMA2_Stream0->CR = (uint32_t) DMA_Config_EnableDMA; // enable DMA now
+
 	TIM2->CR1 |=  (1 << 0); // enable timer
-}
+} // C12880MA_ST()
 
 /* DEPRECATED */ 
 void _C12880MA_start(uint16_t channel_readings[288], uint32_t on_time, uint32_t sensor_clk_cycles) {
