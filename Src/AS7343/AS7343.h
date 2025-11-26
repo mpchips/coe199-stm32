@@ -155,6 +155,7 @@ typedef enum {
   AS7343_SMUX_CMD_READ,      ///< Read SMUX configuration to RAM from SMUX chain
   AS7343_SMUX_CMD_WRITE, ///< Write SMUX configuration from RAM to SMUX chain
 } AS7343_smux_cmd_t;
+
 /**
  * @brief ADC Channel specifiers for configuration
  *
@@ -167,6 +168,7 @@ typedef enum {
   AS7343_ADC_CHANNEL_4,
   AS7343_ADC_CHANNEL_5,
 } AS7343_adc_channel_t;
+
 /**
  * @brief Spectral Channel specifiers for configuration and reading
  *
@@ -243,6 +245,23 @@ typedef enum {
 	  			///< Cycle 2: F2, F3,  F4,  F6, 2xVIS, Clear
 				///< Cycle 3: F1, F5,  F7,  F8, 2xVIS, Clear
 } auto_smux_mode;
+
+/**
+ * @brief holds instance of AS7343 measurement
+ * 				with relevant parameters.
+ */
+typedef struct 
+{
+  uint32_t        raw_count[12]; 	// raw output
+  float		        basic_count[12]; // basic output (see calibration file)
+  AS7343_gain_t	  ADC_GAIN;				// AGAIN in datasheet
+  float		        t_int;						// integration time (computed from ASTEP, ATIME), in ms
+  uint32_t        ASTEP;						// t_int parameter
+  uint32_t        ATIME;						// t_int parameter
+
+  // NOTE: t_int = (1 + AGAIN) * (1 + ATIME) * 2.78µs
+} AS7343_reading;
+
 
 //const float AS7343_BANDS[12] = {405, 425, 450, 475, 515, 550, 555, 600, 640, 690, 745, 855};
 
@@ -323,7 +342,7 @@ int AS7343_ASat();
  * */
 int AS7343_DSat();
 
-void AS7343_get_basic_spectrum_optimized(float channel_readings[12], int max_loops);
+void AS7343_get_basic_spectrum_optimized(AS7343_reading readings, int max_loops);
 
 /**
  * @brief Finds the best parameter configuration to take
@@ -335,11 +354,11 @@ void AS7343_get_basic_spectrum_optimized(float channel_readings[12], int max_loo
  *        will retake measurements and readjust parameters.
  * @return none
  * */
-void AS7343_get_raw_spectrum_optimized(uint16_t channel_readings[12], int max_loops);
+void AS7343_get_raw_spectrum_optimized(AS7343_reading readings, int max_loops);
 
-void AS7343_get_basic_spectrum(float basic_spectrum[12]);
+void AS7343_get_basic_spectrum(AS7343_reading readings);
 
-void AS7343_get_raw_spectrum(uint16_t channel_readings[12]);
+void AS7343_get_raw_spectrum(AS7343_reading readings);
 
 /**
  * @brief Read all channels in the vis-NIR spectrum.
@@ -392,7 +411,7 @@ uint8_t AS7343_read(uint8_t reg_addr);
 
 uint16_t AS7343_read_2b(uint8_t reg_addr_lower_byte);
 
-void clear_AS7343_readings();
+void clear_AS7343_readings(AS7343_reading measurements);
 
 /**
  * @brief Takes array and returns the maximum value in

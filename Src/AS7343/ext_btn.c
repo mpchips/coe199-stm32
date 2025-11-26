@@ -16,16 +16,18 @@
 void EXT_BTN_init(button_t btn) {
 	RCC->AHB1ENR |= (1 << 0); // enable peripheral CLK
 
-	// initialize GPIO pin PA2
-	GPIOA->MODER &= ~(0b11 << 4); // input mode
-	GPIOA->PUPDR &= ~(0b11 << 4); // no pull-up no pull-down
+	// initialize GPIO pin PA1
+	GPIOA->MODER &= ~(0b11 << 2); // input mode
+	GPIOA->PUPDR &= ~(0b11 << 2); // no pull-up no pull-down
 
 	// configure interrupt
-	EXTI->IMR |= (1 << 2);
-	EXTI->RTSR &= ~(1 << 2); // no rising edge detection
-	EXTI->FTSR |=  (1 << 2); // enable falling edge detection
+	EXTI->IMR |= (1 << 1);
+	EXTI->RTSR &= ~(1 << 1); // no rising edge detection
+	EXTI->FTSR |=  (1 << 1); // enable falling edge detection
 
-	NVIC_EnableIRQ(EXTI2_IRQn);
+	EXT_BTN_init_TIMER();
+
+	NVIC_EnableIRQ(EXTI1_IRQn);
 
 	EXT_BTN_reset(btn);
 }

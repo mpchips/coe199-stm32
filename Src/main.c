@@ -104,10 +104,11 @@ float 	 AS7343_reads_blank[12] = {
 		3166,	// 855nm
 };
 
-
-uint16_t C12880MA_readings[288];
-uint16_t ADC_readings[300];
-uint16_t readings[300];
+AS7343_reading AS7343_readings;
+//// C12880MA-related variables
+// uint16_t C12880MA_readings[288];
+// uint16_t ADC_readings[300];
+// uint16_t readings[300];
 int eos;
 /* USER CODE END 0 */
 
@@ -128,19 +129,6 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-  EXT_BTN_init(button);
-
-	UART_printf("Initializing AS7343...");
-	Init_AS7343();
-	UART_printf("DONE\r\n");
-
-  //  UART_printf("Initializing C12880MA...");
-  //  Init_C12880MA(C12880MA_readings);
-  //  UART_printf("Now ready.\r\n");
-
-  //  UART_printf("Initializing ESP32 comm...");
-  //  Init_I2C2();
-  //  UART_printf("DONE\r\n");
 
   /* USER CODE END Init */
 
@@ -157,6 +145,24 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   HAL_UART_Transmit(&huart2, banner, sizeof(banner)-1, 1000);
+
+  UART_printf("Initializing external button...");
+  EXT_BTN_init(button);
+	UART_printf("DONE\r\n");
+
+	UART_printf("Initializing AS7343...");
+	Init_AS7343();
+	UART_printf("DONE\r\n");
+
+  //  UART_printf("Initializing C12880MA...");
+  //  Init_C12880MA(C12880MA_readings);
+  //  UART_printf("Now ready.\r\n");
+
+  //  UART_printf("Initializing ESP32 comm...");
+  //  Init_I2C2();
+  //  UART_printf("DONE\r\n");
+
+
   uint8_t pressed_msg[] = "\r\n\nButton was pressed. Taking measurements...\r\n";
 //  int reps = 20;
 
@@ -197,37 +203,40 @@ int main(void)
 		  //////////////////////////////// ESP32 ROUTINE ////////////////////////////////////
 		  ///////////////////////////////////////////////////////////////////////////////////
 	  	EXT_BTN_reset(button);
+	  	button.status = NOT_PRESSED;
 
  		  HAL_UART_Transmit(&huart2, pressed_msg, sizeof(pressed_msg)-1, 1000);
 
- 		  clear_AS7343_readings(AS7343_reads_curr);
+ 		  clear_AS7343_readings(AS7343_readings);
 
- 		  UART_printf("Reading buffer cleared. Configuring AS7343...\r\n");
+ 		  UART_printf("Reading buffer cleared. Configuring AS7343... ");
 
  		  AS7343_default_config();
 
- 		  AS7343_set_ATIME(11);
- 		  AS7343_set_ASTEP(14999);
+ 		  AS7343_set_ATIME(9);
+ 		  AS7343_set_ASTEP(11999);
  		  AS7343_set_AGAIN(AS7343_GAIN_256X);
 
- 		  UART_printf("Configuration Done. Parameters are:\r\n");
+ 		  UART_printf("DONE\r\n");
 
- 		  uint8_t ATIME = AS7343_get_ATIME();
- 		  uint16_t ASTEP = AS7343_get_ASTEP();
- 		  uint8_t AGAIN = AS7343_get_AGAIN();
- 		  UART_printf("\r\nATIME = %3d", ATIME);
- 		  UART_printf("\r\nASTEP = %3d", ASTEP);
- 		  UART_printf("\r\nAGAIN = %3d\n", AGAIN);
+ 		  // UART_printf("\r\nATIME = %3d", ATIME);
+ 		  // UART_printf("\r\nASTEP = %3d", ASTEP);
+ 		  // UART_printf("\r\nAGAIN = %3d\n", AGAIN);
+ 		  // UART_printf("\r\nT_int = %f\n", ((float) ATIME+1)*((float) ASTEP+1)*0.00278);
 
  		  UART_printf("\r\nNow finding raw spectrum (unoptimized)...\r\n");
 
- 		  AS7343_get_raw_spectrum(AS7343_reads_curr);
+ 		  AS7343_get_raw_spectrum(AS7343_readings);
 
- 		  for (int i = 0; i < 12; ++i) {
- 			  UART_printf("%d\r\n", AS7343_reads_curr[i]);
+ 		  for (int i = 0; i < 10; ++i) { // we excluded last 2 channels which are out of range of reference MSI spectro
+ 			  UART_printf("%d\r\n", AS7343_readings.raw_count[i]);
  		  }
+ 		  //print parameters right after
+ 		  UART_printf("%d\r\n", 2 << (AS7343_readings.ADC_GAIN-2));
+ 		  UART_printf("%f\r\n", AS7343_readings.t_int);
 
 	  } else if (button.status == LONG_PRESS) {
+	  	button.status = NOT_PRESSED;
 	  	UART_printf("\r\nLong press detected. No action.\r\n");
 	  	EXT_BTN_reset(button);
 	  }
@@ -353,15 +362,16 @@ static void MX_GPIO_Init(void)
 //------------------------------------------------------------
 // PUSH BUTTON-RELATED INTERRUPT HANDLERS
 //------------------------------------------------------------
-void EXTI2_IRQHandler(void) {
-	EXTI->PR |= (1 << 2); // clear flag
+void EXTI1_IRQHandler(void) {
+	EXTI->PR |= (1 << 1); // clear flag
+	button.status = SHORT_PRESS;
 
 	if (button.event == BTN_RELEASE) { // if previously released
 		button.event = BTN_PRESS;
 
 		// wait for button release
-		EXTI->RTSR |=  (1 << 2); // enable rising edge detection
-		EXTI->FTSR &= ~(1 << 2); // disable falling edge detection
+		EXTI->RTSR |=  (1 << 1); // enable rising edge detection
+		EXTI->FTSR &= ~(1 << 1); // disable falling edge detection
 
 		TIM5->CNT = 0;
 		TIM5->CR1 |= (1 << 0); // start timer
@@ -369,11 +379,12 @@ void EXTI2_IRQHandler(void) {
 	else if (button.event == BTN_PRESS) { // if previously pressed
 		button.event = BTN_RELEASE;
 		// revert to button press detection
-		EXTI->RTSR &= ~(1 << 2); // no rising edge detection
-		EXTI->FTSR |=  (1 << 2); // enable falling edge detection
+		EXTI->RTSR &= ~(1 << 1); // no rising edge detection
+		EXTI->FTSR |=  (1 << 1); // enable falling edge detection
 
 		if (button.long_press == 1) {
 			button.status = LONG_PRESS;
+			TIM5->CR1 &= ~(1 << 0); // stop timer
 		} else {
 			button.status = SHORT_PRESS;
 			TIM5->CR1 &= ~(1 << 0); // stop timer
@@ -440,12 +451,6 @@ void delay_ms(uint16_t ms) { // im not sure if this works as intended
 void clear_C12880MA_readings(uint16_t C12880MA_readings[288]) {
   for (int i=0; i < 288; ++i) {
     C12880MA_readings[i] = 0;
-  }
-}
-
-void clear_AS7343_readings(uint64_t AS7343_readings[12]) {
-  for (int i=0; i < 12; ++i) {
-    AS7343_readings[i] = 0;
   }
 }
 

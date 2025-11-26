@@ -23,7 +23,7 @@ typedef enum {
 typedef struct {
 	btn_press_t status;
 	btn_event_t event;
-	int 				long_press;
+	int 		long_press;
 } button_t ;
 
 void EXT_BTN_init(button_t btn);

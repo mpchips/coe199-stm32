@@ -250,13 +250,12 @@ int AS7343_ASat() {
 	return (ret_val >> 3);
 }
 
-void AS7343_get_basic_spectrum_optimized(float channel_readings[12], int max_loops) {
-	uint16_t raw_spectrum[12];
-	AS7343_get_raw_spectrum_optimized(raw_spectrum, max_loops);
-	AS7343_raw_to_basic(raw_spectrum, channel_readings);
+void AS7343_get_basic_spectrum_optimized(AS7343_reading readings, int max_loops) {
+	AS7343_get_raw_spectrum_optimized(readings, max_loops);
+	AS7343_raw_to_basic(readings.raw_count, readings.basic_count);
 }
 
-void AS7343_get_raw_spectrum_optimized(uint16_t channel_readings[12], int max_loops) {
+void AS7343_get_raw_spectrum_optimized(AS7343_reading readings, int max_loops) {
 	AS7343_enable();
 	UART_printf("\r\n\nOPTIMIZED ROUTINE START ----------------------------------------");
 	AS7343_default_config(); // reset config
@@ -268,8 +267,8 @@ void AS7343_get_raw_spectrum_optimized(uint16_t channel_readings[12], int max_lo
 
 	float factor; // = ADC_MAX/OUT_MAX, measure of how far output is from max possible
 
-	AS7343_get_raw_spectrum(channel_readings);
-	uint16_t OUT_MAX = maxValue(channel_readings, 12);
+	AS7343_get_raw_spectrum(readings);
+	uint16_t OUT_MAX = maxValue(readings.raw_count, 12);
 
 	UART_printf("\r\nInitial measurement done.");
 //	UART_printf("\rCurrent max: %d\n", OUT_MAX);
@@ -392,8 +391,8 @@ void AS7343_get_raw_spectrum_optimized(uint16_t channel_readings[12], int max_lo
 		}
 
 		// take new measurement; update vals and flags
-		AS7343_get_raw_spectrum(channel_readings);
-		OUT_MAX = maxValue(channel_readings, 12);
+		AS7343_get_raw_spectrum(readings);
+		OUT_MAX = maxValue(readings.raw_count, 12);
 
 		isDigSat = AS7343_DSat(); // digital saturation
 		isAnaSat = AS7343_ASat(); // analog saturation
@@ -406,25 +405,33 @@ void AS7343_get_raw_spectrum_optimized(uint16_t channel_readings[12], int max_lo
 	UART_printf("\r\nASTEP: %3d", curr_ASTEP);
 	UART_printf("\r\nAGAIN: %3d\n", curr_AGAIN);
 
+	
+
 } // AS7343_get_raw_spectrum_optimized()
 
-void AS7343_get_basic_spectrum(float basic_spectrum[12]) {
-	uint16_t raw_spectrum[12];
-	AS7343_get_raw_spectrum(raw_spectrum);
-	AS7343_raw_to_basic(raw_spectrum, basic_spectrum);
+void AS7343_get_basic_spectrum(AS7343_reading readings) {
+	AS7343_get_raw_spectrum(readings);
+	AS7343_raw_to_basic(readings.raw_count, readings.basic_count);
 }
 
-void AS7343_get_raw_spectrum(uint16_t channel_readings[12]) {
+void AS7343_get_raw_spectrum(AS7343_reading readings) {
 	AS7343_enable();
 
 //	UART_printf("AS7343 enabled. Waiting for measurement to finish...\r\n");
 
 	while (!AS7343_done()); // wait for measurement to finish
 //	UART_printf("Measurement finished. Saving output to buffer...\r\n");
-	AS7343_read_spectrum(channel_readings);
+	AS7343_read_spectrum(readings.raw_count);
+	
+	uint8_t curr_ATIME = AS7343_get_ATIME();
+	uint16_t curr_ASTEP = AS7343_get_ASTEP();
+	AS7343_gain_t curr_AGAIN = AS7343_get_AGAIN();
+	float curr_tint = (1 + curr_ATIME) * (1 + curr_ASTEP) * 0.00278;
 
-
-//	UART_printf("Done. Values are ready to be read.\r\n");
+	readings.ATIME = curr_ATIME;
+	readings.ASTEP = curr_ASTEP;
+	readings.ADC_GAIN = curr_AGAIN;
+	readings.t_int = curr_tint;
 
 	AS7343_disable();
 } // AS7343_get_raw_spectrum()
@@ -440,7 +447,7 @@ void AS7343_read_spectrum(uint16_t channel_readings[12]) {
 
 void AS7343_raw_to_basic(uint16_t raw_spectrum[12], float basic_spectrum[12]) {
 	AS7343_gain_t gain = AS7343_get_AGAIN();
-	float t_int = (AS7343_get_ATIME() + 1) * (AS7343_get_ASTEP() + 1);
+	float t_int = (AS7343_get_ATIME() + 1) * (AS7343_get_ASTEP() + 1) * 0.00278;
 
 	for (int i=0 ; i < sizeof(raw_spectrum)/2; ++i) {
 		basic_spectrum[i] = (float) raw_spectrum[i]/(gain*t_int); // formula from EVK user manual
@@ -649,6 +656,13 @@ uint8_t AS7343_read(uint8_t reg_addr) {
 
 	return ret_val;
 
+}
+
+void clear_AS7343_readings(AS7343_reading measurements) {
+  for (int i=0; i < 12; ++i) {
+    measurements.raw_count[i] = 0;
+	measurements.basic_count[i] = 0;
+  }
 }
 
 uint16_t maxValue(uint16_t array[], size_t size) {
