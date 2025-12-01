@@ -414,14 +414,14 @@ void AS7343_get_basic_spectrum(AS7343_reading readings) {
 	AS7343_raw_to_basic(readings.raw_count, readings.basic_count);
 }
 
-void AS7343_get_raw_spectrum(AS7343_reading readings) {
+void AS7343_get_raw_spectrum(uint16_t AS7343_reads[12]) {
 	AS7343_enable();
 
 //	UART_printf("AS7343 enabled. Waiting for measurement to finish...\r\n");
 
 	while (!AS7343_done()); // wait for measurement to finish
 //	UART_printf("Measurement finished. Saving output to buffer...\r\n");
-	AS7343_read_spectrum(readings.raw_count);
+	AS7343_read_spectrum(AS7343_reads);
 	
 	uint8_t curr_ATIME = AS7343_get_ATIME();
 	uint16_t curr_ASTEP = AS7343_get_ASTEP();
@@ -437,7 +437,7 @@ void AS7343_get_raw_spectrum(AS7343_reading readings) {
 } // AS7343_get_raw_spectrum()
 
 
-void AS7343_read_spectrum(uint16_t channel_readings[12]) {
+void AS7343_read_spectrum(uint16_t AS7343_reads[12]) {
 	while (!AS7343_readings_valid()) {} // wait for readings to be valid
 	int i;
 	for (i = 0; i < 12; i++) {

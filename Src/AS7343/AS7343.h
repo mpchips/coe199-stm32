@@ -358,7 +358,7 @@ void AS7343_get_raw_spectrum_optimized(AS7343_reading readings, int max_loops);
 
 void AS7343_get_basic_spectrum(AS7343_reading readings);
 
-void AS7343_get_raw_spectrum(AS7343_reading readings);
+void AS7343_get_raw_spectrum(uint16_t AS7343_reads[12]);
 
 /**
  * @brief Read all channels in the vis-NIR spectrum.
@@ -368,7 +368,7 @@ void AS7343_get_raw_spectrum(AS7343_reading readings);
  * 		  Array of data type uint16_t and length 12 that
  * 		  will hold the channel data readings.
  * */
-void AS7343_read_spectrum(uint16_t channel_readings[12]);
+void AS7343_read_spectrum(uint16_t AS7343_reads[12]);
 
 void AS7343_raw_to_basic(uint16_t raw_spectrum[12], float basic_spectrum[12]);
 

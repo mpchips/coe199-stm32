@@ -86,9 +86,6 @@ static const uint8_t banner[] =
 		"-----------------------------------------------------------------\r\n"
 		"\r\n";
 
-uint64_t AS7343_reads_cumm[12];
-uint16_t AS7343_reads_curr[12];
-float		 AS7343_reads_abs[12];
 float 	 AS7343_reads_blank[12] = {
 		0,		// 400nm
 		0,		// 425nm
@@ -105,6 +102,7 @@ float 	 AS7343_reads_blank[12] = {
 };
 
 AS7343_reading AS7343_readings;
+uint16_t AS7343_reads[12];
 //// C12880MA-related variables
 // uint16_t C12880MA_readings[288];
 // uint16_t ADC_readings[300];
@@ -213,16 +211,11 @@ int main(void)
 
  		  AS7343_default_config();
 
- 		  AS7343_set_ATIME(9);
+ 		  AS7343_set_ATIME(10);
  		  AS7343_set_ASTEP(11999);
  		  AS7343_set_AGAIN(AS7343_GAIN_256X);
 
  		  UART_printf("DONE\r\n");
-
- 		  // UART_printf("\r\nATIME = %3d", ATIME);
- 		  // UART_printf("\r\nASTEP = %3d", ASTEP);
- 		  // UART_printf("\r\nAGAIN = %3d\n", AGAIN);
- 		  // UART_printf("\r\nT_int = %f\n", ((float) ATIME+1)*((float) ASTEP+1)*0.00278);
 
  		  UART_printf("\r\nNow finding raw spectrum (unoptimized)...\r\n");
 
